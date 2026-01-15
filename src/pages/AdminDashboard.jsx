@@ -91,13 +91,3 @@ export default function AdminDashboard() {
     </div>
   );
 }
-
-              </div>
-              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                <p className="text-sm text-purple-600 font-semibold">Role</p>
-                <p className="text-lg font-bold text-gray-800 uppercase">{user?.role}</p>
-              </div>
-            </div>
-
-            <div className="mt-8 p-4 bg-green-50 border border-green-200 rounded-lg">
-              <p className="text-green-800 font-semibold mb-2">✅ Database Stats:</p>
