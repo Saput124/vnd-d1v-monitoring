@@ -102,53 +102,89 @@ export default function MasterData({ data, loading }) {
 const handlePasteFromExcel = (e) => {
   e.preventDefault();
   const pastedText = e.clipboardData.getData('text');
-  console.log('📋 Pasted text:', pastedText); // Debug
+  console.log('📋 Raw pasted text:', pastedText);
+  
+  if (!pastedText || pastedText.trim() === '') {
+    alert('❌ Tidak ada data yang di-paste!');
+    return;
+  }
   
   const lines = pastedText.trim().split('\n');
-  console.log('📝 Total lines:', lines.length); // Debug
+  console.log('📝 Total lines:', lines.length);
   
-  const newRows = lines.map((line, idx) => {
-    // Split by tab (Excel) atau pipe (manual)
-    const cols = line.includes('\t') ? line.split('\t') : line.split('|');
+  const newRows = [];
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue; // Skip empty lines
     
-    console.log(`Row ${idx}:`, cols); // Debug
+    console.log(`Processing line ${i}:`, line);
     
-    return {
-      code: (cols[0] || '').trim(),
-      name: (cols[1] || '').trim(),
-      zone: (cols[2] || '').trim(),
-      kategori: (cols[3] || '').trim(),
-      varietas: (cols[4] || '').trim(),
-      luas_total: (cols[5] || '').trim()
+    // Split by TAB (Excel default) or PIPE
+    let cols;
+    if (line.includes('\t')) {
+      cols = line.split('\t');
+      console.log('Split by TAB:', cols);
+    } else if (line.includes('|')) {
+      cols = line.split('|');
+      console.log('Split by PIPE:', cols);
+    } else {
+      // Single column, skip if it's header-like
+      const lower = line.toLowerCase();
+      if (lower.includes('kode') || lower.includes('nama') || lower.includes('zone')) {
+        console.log('Skipping header line:', line);
+        continue;
+      }
+      console.log('⚠️ Line tidak bisa di-split, skip:', line);
+      continue;
+    }
+    
+    // Extract values
+    const code = (cols[0] || '').trim();
+    const name = (cols[1] || '').trim();
+    const zone = (cols[2] || '').trim();
+    const kategori = (cols[3] || '').trim();
+    const varietas = (cols[4] || '').trim();
+    const luas = (cols[5] || '').trim();
+    
+    // Skip if looks like header
+    if (code.toLowerCase().includes('kode') || 
+        code.toLowerCase().includes('code') ||
+        name.toLowerCase().includes('nama') ||
+        name.toLowerCase().includes('name')) {
+      console.log('Skipping header row:', cols);
+      continue;
+    }
+    
+    // Skip if all empty
+    if (!code && !name && !zone) {
+      console.log('Skipping empty row');
+      continue;
+    }
+    
+    const row = {
+      code: code,
+      name: name,
+      zone: zone,
+      kategori: kategori,
+      varietas: varietas,
+      luas_total: luas
     };
-  }).filter(row => {
-    // Filter out header row (jika ada kata "kode", "nama", dll)
-    const isHeader = row.code.toLowerCase().includes('kode') || 
-                     row.code.toLowerCase().includes('code') ||
-                     row.name.toLowerCase().includes('nama') ||
-                     row.name.toLowerCase().includes('name');
     
-    // Filter out empty rows
-    const isEmpty = !row.code && !row.name && !row.zone;
-    
-    return !isHeader && !isEmpty;
-  });
-
-  console.log('✅ Valid rows:', newRows); // Debug
-  
-  if (newRows.length > 0) {
-    setBulkRows(newRows);
-    alert(`✅ ${newRows.length} baris berhasil di-paste!`);
-  } else {
-    alert('❌ Tidak ada data valid yang di-paste. Cek console untuk debug.');
+    console.log('✅ Valid row:', row);
+    newRows.push(row);
   }
+
+  console.log('Final valid rows:', newRows);
+  
+  if (newRows.length === 0) {
+    alert('❌ Tidak ada data valid yang berhasil di-parse!\n\nPastikan format:\n- Copy dari Excel (6 kolom: Kode, Nama, Zone, Kategori, Varietas, Luas)\n- Atau gunakan format: KODE | NAMA | ZONE | KATEGORI | VARIETAS | LUAS');
+    return;
+  }
+  
+  setBulkRows(newRows);
+  alert(`✅ Berhasil paste ${newRows.length} baris!\n\nSilakan periksa data, lalu klik Import.`);
 };
-  // NEW: Update cell value
-  const updateBulkRow = (index, field, value) => {
-    const newRows = [...bulkRows];
-    newRows[index][field] = value;
-    setBulkRows(newRows);
-  };
 
   // NEW: Add row
   const addBulkRow = () => {
@@ -562,14 +598,56 @@ const handlePasteFromExcel = (e) => {
       {/* Modal: Bulk Import - COMPLETELY REDESIGNED */}
       <Modal show={showBulkModal} onClose={() => setShowBulkModal(false)} title="📋 Bulk Import Blok">
         <div className="space-y-4">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm space-y-2">
             <p className="font-semibold text-blue-900">📌 Cara Import dari Excel:</p>
-            <ol className="text-blue-800 mt-2 space-y-1 ml-4 list-decimal">
-              <li>Copy data dari Excel (tanpa header)</li>
-              <li>Klik di baris pertama kolom "Kode"</li>
-              <li>Paste (Ctrl+V / Cmd+V)</li>
-              <li>Atau isi manual lalu klik "+ Tambah Baris"</li>
+            <ol className="text-blue-800 space-y-1 ml-4 list-decimal">
+              <li><strong>Select 6 kolom</strong> dari Excel (Kode, Nama, Zone, Kategori, Varietas, Luas)</li>
+              <li><strong>Copy</strong> (Ctrl+C / Cmd+C)</li>
+              <li><strong>Klik di baris pertama</strong> kolom "Kode" di tabel bawah</li>
+              <li><strong>Paste</strong> (Ctrl+V / Cmd+V)</li>
+              <li>Data otomatis terisi ke semua baris & kolom</li>
+              <li>Periksa data, lalu klik <strong>Import</strong></li>
             </ol>
+            
+            <div className="bg-white border border-blue-300 rounded p-2 mt-2">
+              <p className="text-xs font-semibold text-blue-900 mb-1">Contoh format Excel:</p>
+              <table className="w-full text-xs font-mono">
+                <thead className="bg-gray-100">
+                  <tr>
+                    <td className="px-1 py-1 border">Kode</td>
+                    <td className="px-1 py-1 border">Nama</td>
+                    <td className="px-1 py-1 border">Zone</td>
+                    <td className="px-1 py-1 border">Kategori</td>
+                    <td className="px-1 py-1 border">Varietas</td>
+                    <td className="px-1 py-1 border">Luas</td>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="px-1 py-1 border">BLOK-011</td>
+                    <td className="px-1 py-1 border">Blok K</td>
+                    <td className="px-1 py-1 border">Zone 1</td>
+                    <td className="px-1 py-1 border">PC</td>
+                    <td className="px-1 py-1 border">PS881</td>
+                    <td className="px-1 py-1 border">7.5</td>
+                  </tr>
+                  <tr>
+                    <td className="px-1 py-1 border">BLOK-012</td>
+                    <td className="px-1 py-1 border">Blok L</td>
+                    <td className="px-1 py-1 border">Zone 2</td>
+                    <td className="px-1 py-1 border">RC</td>
+                    <td className="px-1 py-1 border">PS862</td>
+                    <td className="px-1 py-1 border">8.0</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p className="text-xs text-blue-700 mt-1">👆 Select semua data (tanpa header), lalu Copy-Paste</p>
+            </div>
+            
+            <p className="text-xs text-blue-700 mt-2">
+              💡 <strong>Tips:</strong> Jika paste tidak berhasil, coba format manual dengan separator | (pipe):<br/>
+              <span className="font-mono bg-white px-1 rounded">BLOK-011 | Blok K | Zone 1 | PC | PS881 | 7.5</span>
+            </p>
           </div>
 
           <div className="overflow-x-auto max-h-96 border rounded-lg">
