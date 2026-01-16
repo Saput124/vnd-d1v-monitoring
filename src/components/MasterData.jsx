@@ -7,7 +7,11 @@ export default function MasterData({ data, loading }) {
   const [modalType, setModalType] = useState('');
   const [editData, setEditData] = useState(null);
   const [showBulkModal, setShowBulkModal] = useState(false);
-  const [bulkData, setBulkData] = useState('');
+  
+  // NEW: State untuk bulk import dengan tabel
+  const [bulkRows, setBulkRows] = useState([
+    { code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '' }
+  ]);
 
   const openModal = (type, data = null) => {
     setModalType(type);
@@ -93,46 +97,70 @@ export default function MasterData({ data, loading }) {
     }
   };
 
+  // NEW: Handle paste dari Excel
+  const handlePasteFromExcel = (e) => {
+    e.preventDefault();
+    const pastedText = e.clipboardData.getData('text');
+    const lines = pastedText.trim().split('\n');
+    
+    const newRows = lines.map(line => {
+      const cols = line.split('\t');
+      return {
+        code: cols[0] || '',
+        name: cols[1] || '',
+        zone: cols[2] || '',
+        kategori: cols[3] || '',
+        varietas: cols[4] || '',
+        luas_total: cols[5] || ''
+      };
+    });
+
+    setBulkRows(newRows);
+  };
+
+  // NEW: Update cell value
+  const updateBulkRow = (index, field, value) => {
+    const newRows = [...bulkRows];
+    newRows[index][field] = value;
+    setBulkRows(newRows);
+  };
+
+  // NEW: Add row
+  const addBulkRow = () => {
+    setBulkRows([...bulkRows, { code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '' }]);
+  };
+
+  // NEW: Remove row
+  const removeBulkRow = (index) => {
+    if (bulkRows.length > 1) {
+      setBulkRows(bulkRows.filter((_, i) => i !== index));
+    }
+  };
+
+  // NEW: Bulk import dari tabel
   const handleBulkImport = async () => {
-    if (!bulkData.trim()) {
-      alert('❌ Data kosong!');
+    const validRows = bulkRows.filter(row => row.code && row.name && row.zone);
+    
+    if (validRows.length === 0) {
+      alert('❌ Tidak ada data yang valid untuk diimport!');
       return;
     }
 
     try {
-      const lines = bulkData.trim().split('\n');
-      const records = [];
-
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-
-        // Format: KODE | NAMA | ZONE | KATEGORI | VARIETAS | LUAS
-        const parts = line.split('|').map(p => p.trim());
-        
-        if (parts.length !== 6) {
-          alert(`❌ Baris ${i + 1} format salah! Harusnya: KODE | NAMA | ZONE | KATEGORI | VARIETAS | LUAS`);
-          return;
-        }
-
-        records.push({
-          code: parts[0],
-          name: parts[1],
-          zone: parts[2],
-          kategori: parts[3],
-          varietas: parts[4],
-          luas_total: parseFloat(parts[5])
+      for (const row of validRows) {
+        await data.addBlock({
+          code: row.code,
+          name: row.name,
+          zone: row.zone,
+          kategori: row.kategori,
+          varietas: row.varietas,
+          luas_total: parseFloat(row.luas_total) || 0
         });
       }
 
-      // Bulk insert
-      for (const record of records) {
-        await data.addBlock(record);
-      }
-
-      alert(`✅ Berhasil import ${records.length} blok!`);
+      alert(`✅ Berhasil import ${validRows.length} blok!`);
       setShowBulkModal(false);
-      setBulkData('');
+      setBulkRows([{ code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '' }]);
     } catch (err) {
       alert('❌ Error: ' + err.message);
     }
@@ -305,7 +333,9 @@ export default function MasterData({ data, loading }) {
                     <td className="px-4 py-3 text-sm">{block.zone}</td>
                     <td className="px-4 py-3 text-sm">
                       <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                        block.kategori === 'PC' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
+                        block.kategori === 'PC' ? 'bg-green-100 text-green-800' : 
+                        block.kategori === 'RC' ? 'bg-blue-100 text-blue-800' : 
+                        'bg-purple-100 text-purple-800'
                       }`}>
                         {block.kategori || '-'}
                       </span>
@@ -391,7 +421,7 @@ export default function MasterData({ data, loading }) {
         </div>
       )}
 
-      {/* Existing Modals (Vendor, Block, Worker) - TETAP SAMA */}
+      {/* Modal: Vendor */}
       <Modal show={showModal && modalType === 'vendor'} onClose={closeModal} title={editData ? 'Edit Vendor' : 'Tambah Vendor'}>
         <form onSubmit={handleVendorSubmit} className="space-y-4">
           <div>
@@ -417,7 +447,8 @@ export default function MasterData({ data, loading }) {
         </form>
       </Modal>
 
-<Modal show={showModal && modalType === 'block'} onClose={closeModal} title={editData ? 'Edit Blok' : 'Tambah Blok'}>
+      {/* Modal: Block - UPDATED */}
+      <Modal show={showModal && modalType === 'block'} onClose={closeModal} title={editData ? 'Edit Blok' : 'Tambah Blok'}>
         <form onSubmit={handleBlockSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-2">Kode Blok</label>
@@ -432,25 +463,37 @@ export default function MasterData({ data, loading }) {
             <input name="zone" defaultValue={editData?.zone || ''} required className="w-full px-4 py-2 border rounded-lg" placeholder="Zone 1" />
           </div>
           
-          {/* TAMBAH KATEGORI */}
+          {/* UPDATED: Kategori dengan opsi lengkap */}
           <div>
             <label className="block text-sm font-medium mb-2">Kategori</label>
             <select name="kategori" defaultValue={editData?.kategori || ''} required className="w-full px-4 py-2 border rounded-lg">
               <option value="">-- Pilih Kategori --</option>
               <option value="PC">PC (Plant Cane)</option>
               <option value="RC">RC (Ratoon Cane)</option>
+              <option value="R1">R1 (Ratoon 1)</option>
+              <option value="R2">R2 (Ratoon 2)</option>
+              <option value="R3">R3 (Ratoon 3)</option>
+              <option value="Bibit">Bibit</option>
             </select>
           </div>
 
-          {/* TAMBAH VARIETAS */}
+          {/* UPDATED: Varietas bisa diketik manual */}
           <div>
             <label className="block text-sm font-medium mb-2">Varietas</label>
-            <select name="varietas" defaultValue={editData?.varietas || ''} required className="w-full px-4 py-2 border rounded-lg">
-              <option value="">-- Pilih Varietas --</option>
-              <option value="PS881">PS881</option>
-              <option value="PS862">PS862</option>
-              <option value="PS864">PS864</option>
-            </select>
+            <input 
+              name="varietas" 
+              defaultValue={editData?.varietas || ''} 
+              required 
+              className="w-full px-4 py-2 border rounded-lg" 
+              placeholder="Contoh: PS881, PS862, PS864"
+              list="varietas-list"
+            />
+            <datalist id="varietas-list">
+              <option value="PS881" />
+              <option value="PS862" />
+              <option value="PS864" />
+            </datalist>
+            <p className="text-xs text-gray-500 mt-1">💡 Ketik manual atau pilih dari saran</p>
           </div>
 
           <div>
@@ -464,6 +507,7 @@ export default function MasterData({ data, loading }) {
         </form>
       </Modal>
 
+      {/* Modal: Worker */}
       <Modal show={showModal && modalType === 'worker'} onClose={closeModal} title={editData ? 'Edit Pekerja' : 'Tambah Pekerja'}>
         <form onSubmit={handleWorkerSubmit} className="space-y-4">
           <div>
@@ -490,46 +534,133 @@ export default function MasterData({ data, loading }) {
         </form>
       </Modal>
 
-      {/* NEW: Bulk Import Modal */}
+      {/* Modal: Bulk Import - COMPLETELY REDESIGNED */}
       <Modal show={showBulkModal} onClose={() => setShowBulkModal(false)} title="📋 Bulk Import Blok">
         <div className="space-y-4">
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm">
-            <p className="font-semibold text-yellow-900 mb-2">Format Input:</p>
-            <p className="font-mono text-xs text-yellow-800">
-              KODE | NAMA | ZONE | KATEGORI | VARIETAS | LUAS
-            </p>
-            <p className="text-yellow-700 mt-2">Contoh:</p>
-            <div className="font-mono text-xs bg-white p-2 rounded mt-1">
-              BLOK-011 | Blok K | Zone 1 | PC | PS881 | 7.5<br/>
-              BLOK-012 | Blok L | Zone 2 | RC | PS862 | 8.0<br/>
-              BLOK-013 | Blok M | Zone 2 | PC | PS864 | 6.5
-            </div>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+            <p className="font-semibold text-blue-900">📌 Cara Import dari Excel:</p>
+            <ol className="text-blue-800 mt-2 space-y-1 ml-4 list-decimal">
+              <li>Copy data dari Excel (tanpa header)</li>
+              <li>Klik di baris pertama kolom "Kode"</li>
+              <li>Paste (Ctrl+V / Cmd+V)</li>
+              <li>Atau isi manual lalu klik "+ Tambah Baris"</li>
+            </ol>
           </div>
-          
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Paste Data (satu baris per blok)
-            </label>
-            <textarea
-              value={bulkData}
-              onChange={(e) => setBulkData(e.target.value)}
-              className="w-full px-4 py-2 border rounded-lg font-mono text-sm"
-              rows={10}
-              placeholder="BLOK-011 | Blok K | Zone 1 | 7.5&#10;BLOK-012 | Blok L | Zone 2 | 8.0"
-            />
+
+          <div className="overflow-x-auto max-h-96 border rounded-lg">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-100 sticky top-0">
+                <tr>
+                  <th className="px-2 py-2 text-left font-semibold">No</th>
+                  <th className="px-2 py-2 text-left font-semibold">Kode</th>
+                  <th className="px-2 py-2 text-left font-semibold">Nama Blok</th>
+                  <th className="px-2 py-2 text-left font-semibold">Zone</th>
+                  <th className="px-2 py-2 text-left font-semibold">Kategori</th>
+                  <th className="px-2 py-2 text-left font-semibold">Varietas</th>
+                  <th className="px-2 py-2 text-left font-semibold">Luas (Ha)</th>
+                  <th className="px-2 py-2 text-left font-semibold">Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bulkRows.map((row, index) => (
+                  <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                    <td className="px-2 py-2 text-center">{index + 1}</td>
+                    <td className="px-2 py-2">
+                      <input
+                        type="text"
+                        value={row.code}
+                        onChange={(e) => updateBulkRow(index, 'code', e.target.value)}
+                        onPaste={index === 0 ? handlePasteFromExcel : undefined}
+                        className="w-full px-2 py-1 border rounded text-sm"
+                        placeholder="BLOK-001"
+                      />
+                    </td>
+                    <td className="px-2 py-2">
+                      <input
+                        type="text"
+                        value={row.name}
+                        onChange={(e) => updateBulkRow(index, 'name', e.target.value)}
+                        className="w-full px-2 py-1 border rounded text-sm"
+                        placeholder="Blok A"
+                      />
+                    </td>
+                    <td className="px-2 py-2">
+                      <input
+                        type="text"
+                        value={row.zone}
+                        onChange={(e) => updateBulkRow(index, 'zone', e.target.value)}
+                        className="w-full px-2 py-1 border rounded text-sm"
+                        placeholder="Zone 1"
+                      />
+                    </td>
+                    <td className="px-2 py-2">
+                      <select
+                        value={row.kategori}
+                        onChange={(e) => updateBulkRow(index, 'kategori', e.target.value)}
+                        className="w-full px-2 py-1 border rounded text-sm"
+                      >
+                        <option value="">--</option>
+                        <option value="PC">PC</option>
+                        <option value="RC">RC</option>
+                        <option value="R1">R1</option>
+                        <option value="R2">R2</option>
+                        <option value="R3">R3</option>
+                        <option value="Bibit">Bibit</option>
+                      </select>
+                    </td>
+                    <td className="px-2 py-2">
+                      <input
+                        type="text"
+                        value={row.varietas}
+                        onChange={(e) => updateBulkRow(index, 'varietas', e.target.value)}
+                        className="w-full px-2 py-1 border rounded text-sm"
+                        placeholder="PS881"
+                      />
+                    </td>
+                    <td className="px-2 py-2">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={row.luas_total}
+                        onChange={(e) => updateBulkRow(index, 'luas_total', e.target.value)}
+                        className="w-full px-2 py-1 border rounded text-sm"
+                        placeholder="8.00"
+                      />
+                    </td>
+                    <td className="px-2 py-2">
+                      <button
+                        type="button"
+                        onClick={() => removeBulkRow(index)}
+                        className="text-red-600 hover:text-red-800 font-semibold"
+                        disabled={bulkRows.length === 1}
+                      >
+                        🗑️
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
           <div className="flex gap-3">
             <button
+              type="button"
+              onClick={addBulkRow}
+              className="flex-1 bg-gray-500 text-white py-2 rounded-lg hover:bg-gray-600 font-semibold"
+            >
+              ➕ Tambah Baris
+            </button>
+            <button
               onClick={handleBulkImport}
               className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 font-semibold"
             >
-              📥 Import
+              📥 Import ({bulkRows.filter(r => r.code && r.name && r.zone).length} valid)
             </button>
             <button
               onClick={() => {
                 setShowBulkModal(false);
-                setBulkData('');
+                setBulkRows([{ code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '' }]);
               }}
               className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400"
             >
