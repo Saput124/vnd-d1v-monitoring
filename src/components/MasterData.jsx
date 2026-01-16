@@ -66,7 +66,7 @@ export default function MasterData({ data, loading }) {
       zone: formData.get('zone'),
       kategori: formData.get('kategori'),
       varietas: formData.get('varietas'),
-      luas_total: parseFloat(formData.get('luas_total'))
+      luas_total: parseDecimal(formData.get('luas_total'))
     };
 
     try {
@@ -111,7 +111,7 @@ export default function MasterData({ data, loading }) {
   // ============================================================================
   const handlePasteFromExcel = (e, startRowIndex = 0, startField = 'code') => {
     e.preventDefault();
-    const pastedText = e.clipboardData.getData('text');
+    const pastedText = e.clipboardData.getData('text/plain');
     console.log('📋 Raw pasted text:', pastedText);
     
     if (!pastedText || pastedText.trim() === '') {
@@ -229,7 +229,7 @@ export default function MasterData({ data, loading }) {
           zone: row.zone,
           kategori: row.kategori,
           varietas: row.varietas,
-          luas_total: parseFloat(row.luas_total) || 0
+          luas_total: parseDecimal(row.luas_total) || 0
         });
       }
 
