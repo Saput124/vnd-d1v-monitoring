@@ -56,6 +56,10 @@ export default function MasterData({ data, loading }) {
       alert('❌ Error: ' + err.message);
     }
   };
+  const parseDecimal = (value) => {
+  if (value === null || value === undefined || value === '') return 0;
+  return parseFloat(value.toString().replace(',', '.'));
+  };
 
   const handleBlockSubmit = async (e) => {
     e.preventDefault();
@@ -215,7 +219,11 @@ export default function MasterData({ data, loading }) {
   // Bulk import dari tabel
   const handleBulkImport = async () => {
     const validRows = bulkRows.filter(row => row.code && row.name && row.zone);
-    
+   const parseDecimal = (value) => {
+  if (value === null || value === undefined || value === '') return 0;
+  return parseFloat(value.toString().replace(',', '.'));
+};
+ 
     if (validRows.length === 0) {
       alert('❌ Tidak ada data yang valid untuk diimport!');
       return;
