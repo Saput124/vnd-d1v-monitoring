@@ -415,7 +415,7 @@ export default function MasterData({ data, loading }) {
         </form>
       </Modal>
 
-<Modal show={showModal && modalType === 'block'} onClose={closeModal} title={editData ? 'Edit Blok' : 'Tambah Blok'}>
+      <Modal show={showModal && modalType === 'block'} onClose={closeModal} title={editData ? 'Edit Blok' : 'Tambah Blok'}>
         <form onSubmit={handleBlockSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-2">Kode Blok</label>
