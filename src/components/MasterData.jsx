@@ -8,10 +8,19 @@ export default function MasterData({ data, loading }) {
   const [editData, setEditData] = useState(null);
   const [showBulkModal, setShowBulkModal] = useState(false);
   
-  // NEW: State untuk bulk import dengan tabel
+  // State untuk bulk import dengan tabel
   const [bulkRows, setBulkRows] = useState([
     { code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '' }
   ]);
+
+  // ============================================================================
+  // 🆕 TAMBAHAN: Function untuk update single cell (INI YANG KURANG!)
+  // ============================================================================
+  const updateBulkRow = (index, field, value) => {
+    const newRows = [...bulkRows];
+    newRows[index][field] = value;
+    setBulkRows(newRows);
+  };
 
   const openModal = (type, data = null) => {
     setModalType(type);
@@ -97,108 +106,113 @@ export default function MasterData({ data, loading }) {
     }
   };
 
-  // Handle paste dari Excel
-
-const handlePasteFromExcel = (e) => {
-  e.preventDefault();
-  const pastedText = e.clipboardData.getData('text');
-  console.log('📋 Raw pasted text:', pastedText);
-  
-  if (!pastedText || pastedText.trim() === '') {
-    alert('❌ Tidak ada data yang di-paste!');
-    return;
-  }
-  
-  const lines = pastedText.trim().split('\n');
-  console.log('📝 Total lines:', lines.length);
-  
-  const newRows = [];
-  
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue; // Skip empty lines
+  // ============================================================================
+  // 🔄 DIPERBAIKI: Handle paste dari Excel - Smart Paste dengan Auto-Detect
+  // ============================================================================
+  const handlePasteFromExcel = (e, startRowIndex = 0, startField = 'code') => {
+    e.preventDefault();
+    const pastedText = e.clipboardData.getData('text');
+    console.log('📋 Raw pasted text:', pastedText);
     
-    console.log(`Processing line ${i}:`, line);
+    if (!pastedText || pastedText.trim() === '') {
+      alert('❌ Tidak ada data yang di-paste!');
+      return;
+    }
     
-    // Split by TAB (Excel default) or PIPE
-    let cols;
-    if (line.includes('\t')) {
-      cols = line.split('\t');
-      console.log('Split by TAB:', cols);
-    } else if (line.includes('|')) {
-      cols = line.split('|');
-      console.log('Split by PIPE:', cols);
-    } else {
-      // Single column, skip if it's header-like
-      const lower = line.toLowerCase();
-      if (lower.includes('kode') || lower.includes('nama') || lower.includes('zone')) {
-        console.log('Skipping header line:', line);
+    const lines = pastedText.trim().split('\n');
+    console.log('📝 Total lines:', lines.length);
+    
+    const newRows = [];
+    const fields = ['code', 'name', 'zone', 'kategori', 'varietas', 'luas_total'];
+    const startFieldIndex = fields.indexOf(startField);
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      
+      console.log(`Processing line ${i}:`, line);
+      
+      // Split by TAB (Excel default) or PIPE
+      let cols;
+      if (line.includes('\t')) {
+        cols = line.split('\t').map(c => c.trim());
+        console.log('Split by TAB:', cols);
+      } else if (line.includes('|')) {
+        cols = line.split('|').map(c => c.trim());
+        console.log('Split by PIPE:', cols);
+      } else {
+        // Single value - paste ke field yang di-klik
+        if (startFieldIndex >= 0) {
+          const row = { code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '' };
+          row[startField] = line;
+          newRows.push(row);
+        }
         continue;
       }
-      console.log('⚠️ Line tidak bisa di-split, skip:', line);
-      continue;
+      
+      // Skip if looks like header
+      const firstCol = (cols[0] || '').toLowerCase();
+      if (firstCol.includes('kode') || firstCol.includes('code') ||
+          firstCol.includes('nama') || firstCol.includes('name')) {
+        console.log('Skipping header row:', cols);
+        continue;
+      }
+      
+      // Build row object
+      const row = { code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '' };
+      
+      // Map columns ke fields, mulai dari startField
+      for (let j = 0; j < cols.length && (startFieldIndex + j) < fields.length; j++) {
+        const fieldName = fields[startFieldIndex + j];
+        row[fieldName] = cols[j] || '';
+      }
+      
+      // Skip if semua required field kosong
+      if (!row.code && !row.name && !row.zone) {
+        console.log('Skipping empty row');
+        continue;
+      }
+      
+      console.log('✅ Valid row:', row);
+      newRows.push(row);
     }
-    
-    // Extract values
-    const code = (cols[0] || '').trim();
-    const name = (cols[1] || '').trim();
-    const zone = (cols[2] || '').trim();
-    const kategori = (cols[3] || '').trim();
-    const varietas = (cols[4] || '').trim();
-    const luas = (cols[5] || '').trim();
-    
-    // Skip if looks like header
-    if (code.toLowerCase().includes('kode') || 
-        code.toLowerCase().includes('code') ||
-        name.toLowerCase().includes('nama') ||
-        name.toLowerCase().includes('name')) {
-      console.log('Skipping header row:', cols);
-      continue;
-    }
-    
-    // Skip if all empty
-    if (!code && !name && !zone) {
-      console.log('Skipping empty row');
-      continue;
-    }
-    
-    const row = {
-      code: code,
-      name: name,
-      zone: zone,
-      kategori: kategori,
-      varietas: varietas,
-      luas_total: luas
-    };
-    
-    console.log('✅ Valid row:', row);
-    newRows.push(row);
-  }
 
-  console.log('Final valid rows:', newRows);
-  
-  if (newRows.length === 0) {
-    alert('❌ Tidak ada data valid yang berhasil di-parse!\n\nPastikan format:\n- Copy dari Excel (6 kolom: Kode, Nama, Zone, Kategori, Varietas, Luas)\n- Atau gunakan format: KODE | NAMA | ZONE | KATEGORI | VARIETAS | LUAS');
-    return;
-  }
-  
-  setBulkRows(newRows);
-  alert(`✅ Berhasil paste ${newRows.length} baris!\n\nSilakan periksa data, lalu klik Import.`);
-};
+    console.log('Final valid rows:', newRows);
+    
+    if (newRows.length === 0) {
+      alert('❌ Tidak ada data valid yang berhasil di-parse!\n\nPastikan format:\n- Copy dari Excel (6 kolom: Kode, Nama, Zone, Kategori, Varietas, Luas)\n- Atau gunakan format: KODE | NAMA | ZONE | KATEGORI | VARIETAS | LUAS');
+      return;
+    }
+    
+    // Replace from startRowIndex atau replace all jika paste di baris pertama
+    if (startRowIndex === 0) {
+      setBulkRows(newRows);
+    } else {
+      const updatedRows = [...bulkRows];
+      updatedRows.splice(startRowIndex, Math.min(newRows.length, updatedRows.length - startRowIndex), ...newRows);
+      // Tambah baris baru jika paste data lebih banyak
+      if (newRows.length > updatedRows.length - startRowIndex) {
+        updatedRows.push(...newRows.slice(updatedRows.length - startRowIndex));
+      }
+      setBulkRows(updatedRows);
+    }
+    
+    alert(`✅ Berhasil paste ${newRows.length} baris!\n\nSilakan periksa data, lalu klik Import.`);
+  };
 
-  // NEW: Add row
+  // Add row
   const addBulkRow = () => {
     setBulkRows([...bulkRows, { code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '' }]);
   };
 
-  // NEW: Remove row
+  // Remove row
   const removeBulkRow = (index) => {
     if (bulkRows.length > 1) {
       setBulkRows(bulkRows.filter((_, i) => i !== index));
     }
   };
 
-  // NEW: Bulk import dari tabel
+  // Bulk import dari tabel
   const handleBulkImport = async () => {
     const validRows = bulkRows.filter(row => row.code && row.name && row.zone);
     
@@ -508,7 +522,7 @@ const handlePasteFromExcel = (e) => {
         </form>
       </Modal>
 
-      {/* Modal: Block - UPDATED */}
+      {/* Modal: Block */}
       <Modal show={showModal && modalType === 'block'} onClose={closeModal} title={editData ? 'Edit Blok' : 'Tambah Blok'}>
         <form onSubmit={handleBlockSubmit} className="space-y-4">
           <div>
@@ -524,7 +538,6 @@ const handlePasteFromExcel = (e) => {
             <input name="zone" defaultValue={editData?.zone || ''} required className="w-full px-4 py-2 border rounded-lg" placeholder="Zone 1" />
           </div>
           
-          {/* UPDATED: Kategori dengan opsi lengkap */}
           <div>
             <label className="block text-sm font-medium mb-2">Kategori</label>
             <select name="kategori" defaultValue={editData?.kategori || ''} required className="w-full px-4 py-2 border rounded-lg">
@@ -538,7 +551,6 @@ const handlePasteFromExcel = (e) => {
             </select>
           </div>
 
-          {/* UPDATED: Varietas bisa diketik manual */}
           <div>
             <label className="block text-sm font-medium mb-2">Varietas</label>
             <input 
