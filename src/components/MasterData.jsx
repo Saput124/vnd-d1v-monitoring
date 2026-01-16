@@ -97,27 +97,52 @@ export default function MasterData({ data, loading }) {
     }
   };
 
-  // NEW: Handle paste dari Excel
-  const handlePasteFromExcel = (e) => {
-    e.preventDefault();
-    const pastedText = e.clipboardData.getData('text');
-    const lines = pastedText.trim().split('\n');
+  // Handle paste dari Excel
+
+const handlePasteFromExcel = (e) => {
+  e.preventDefault();
+  const pastedText = e.clipboardData.getData('text');
+  console.log('📋 Pasted text:', pastedText); // Debug
+  
+  const lines = pastedText.trim().split('\n');
+  console.log('📝 Total lines:', lines.length); // Debug
+  
+  const newRows = lines.map((line, idx) => {
+    // Split by tab (Excel) atau pipe (manual)
+    const cols = line.includes('\t') ? line.split('\t') : line.split('|');
     
-    const newRows = lines.map(line => {
-      const cols = line.split('\t');
-      return {
-        code: cols[0] || '',
-        name: cols[1] || '',
-        zone: cols[2] || '',
-        kategori: cols[3] || '',
-        varietas: cols[4] || '',
-        luas_total: cols[5] || ''
-      };
-    });
+    console.log(`Row ${idx}:`, cols); // Debug
+    
+    return {
+      code: (cols[0] || '').trim(),
+      name: (cols[1] || '').trim(),
+      zone: (cols[2] || '').trim(),
+      kategori: (cols[3] || '').trim(),
+      varietas: (cols[4] || '').trim(),
+      luas_total: (cols[5] || '').trim()
+    };
+  }).filter(row => {
+    // Filter out header row (jika ada kata "kode", "nama", dll)
+    const isHeader = row.code.toLowerCase().includes('kode') || 
+                     row.code.toLowerCase().includes('code') ||
+                     row.name.toLowerCase().includes('nama') ||
+                     row.name.toLowerCase().includes('name');
+    
+    // Filter out empty rows
+    const isEmpty = !row.code && !row.name && !row.zone;
+    
+    return !isHeader && !isEmpty;
+  });
 
+  console.log('✅ Valid rows:', newRows); // Debug
+  
+  if (newRows.length > 0) {
     setBulkRows(newRows);
-  };
-
+    alert(`✅ ${newRows.length} baris berhasil di-paste!`);
+  } else {
+    alert('❌ Tidak ada data valid yang di-paste. Cek console untuk debug.');
+  }
+};
   // NEW: Update cell value
   const updateBulkRow = (index, field, value) => {
     const newRows = [...bulkRows];
