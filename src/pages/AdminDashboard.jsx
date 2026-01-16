@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSupabaseData } from '../hooks/useSupabaseData';
 import MasterData from '../components/MasterData';
+import BlockRegistration from '../components/BlockRegistration';
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
@@ -10,6 +11,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50">
+      {/* Header - TETAP SAMA */}
       <header className="bg-gradient-to-r from-green-600 to-blue-600 text-white shadow-lg">
         <div className="container mx-auto px-4 py-6">
           <div className="flex justify-between items-center">
@@ -32,13 +34,14 @@ export default function AdminDashboard() {
         </div>
       </header>
 
-      {/* Navigation Tabs */}
+      {/* Navigation Tabs - TAMBAH TAB BARU */}
       <div className="bg-white shadow-md border-b">
         <div className="container mx-auto px-4">
           <div className="flex space-x-1 overflow-x-auto">
             {[
-              { id: 'dashboard', label: '📊 Dashboard', icon: '📊' },
-              { id: 'master', label: '💾 Master Data', icon: '💾' },
+              { id: 'dashboard', label: '📊 Dashboard' },
+              { id: 'master', label: '💾 Master Data' },
+              { id: 'registration', label: '📋 Block Registration' }, // BARU
             ].map(tab => (
               <button
                 key={tab.id}
@@ -59,42 +62,38 @@ export default function AdminDashboard() {
       <div className="container mx-auto px-4 py-8">
         {activeTab === 'dashboard' && (
           <div className="bg-white rounded-lg shadow-md p-8">
+            {/* Dashboard content - TETAP SAMA */}
             <h2 className="text-2xl font-bold text-gray-800 mb-4">
               🎉 Sistem Berhasil Deploy!
             </h2>
-            <p className="text-gray-600 mb-6">
-              VND D-One Monitoring System berhasil terkoneksi dengan Supabase dan deploy di Vercel.
-            </p>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-blue-600 font-semibold">Username</p>
-                <p className="text-lg font-bold text-gray-800">{user?.username}</p>
+                <p className="text-sm text-blue-600 font-semibold">Vendors</p>
+                <p className="text-2xl font-bold text-gray-800">{data.vendors.length}</p>
               </div>
               <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <p className="text-sm text-green-600 font-semibold">Full Name</p>
-                <p className="text-lg font-bold text-gray-800">{user?.full_name}</p>
+                <p className="text-sm text-green-600 font-semibold">Blocks</p>
+                <p className="text-2xl font-bold text-gray-800">{data.blocks.length}</p>
               </div>
               <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                <p className="text-sm text-purple-600 font-semibold">Role</p>
-                <p className="text-lg font-bold text-gray-800 uppercase">{user?.role}</p>
+                <p className="text-sm text-purple-600 font-semibold">Workers</p>
+                <p className="text-2xl font-bold text-gray-800">{data.workers.length}</p>
               </div>
-            </div>
-
-            <div className="mt-8 p-4 bg-green-50 border border-green-200 rounded-lg">
-              <p className="text-green-800 font-semibold mb-2">✅ Database Stats:</p>
-              <ul className="space-y-1 text-sm text-green-700">
-                <li>✓ Vendors: {data.vendors.length}</li>
-                <li>✓ Blocks: {data.blocks.length}</li>
-                <li>✓ Workers: {data.workers.length}</li>
-                <li>✓ Activity Types: {data.activityTypes.length}</li>
-              </ul>
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <p className="text-sm text-yellow-600 font-semibold">Registered</p>
+                <p className="text-2xl font-bold text-gray-800">{data.blockActivities.length}</p>
+              </div>
             </div>
           </div>
         )}
 
         {activeTab === 'master' && (
           <MasterData data={data} loading={data.loading} />
+        )}
+
+        {activeTab === 'registration' && (
+          <BlockRegistration data={data} loading={data.loading} />
         )}
       </div>
     </div>
