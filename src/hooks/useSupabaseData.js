@@ -93,12 +93,59 @@ export function useSupabaseData() {
     await fetchAllData();
   };
 
+   const [blockActivities, setBlockActivities] = useState([]);
+
+  const fetchAllData = async () => {
+    setLoading(true);
+    try {
+      const [vendorsRes, blocksRes, workersRes, activityRes, blockActivitiesRes] = await Promise.all([
+        supabase.from('vendors').select('*').order('name'),
+        supabase.from('blocks').select('*').order('zone, name'),
+        supabase.from('workers').select('*, vendors(name)').order('name'),
+        supabase.from('activity_types').select('*').order('name'),
+        supabase.from('block_activities').select('*').order('target_bulan, created_at')
+      ]);
+
+      if (vendorsRes.error) throw vendorsRes.error;
+      if (blocksRes.error) throw blocksRes.error;
+      if (workersRes.error) throw workersRes.error;
+      if (activityRes.error) throw activityRes.error;
+      if (blockActivitiesRes.error) throw blockActivitiesRes.error;
+
+      setVendors(vendorsRes.data || []);
+      setBlocks(blocksRes.data || []);
+      setWorkers(workersRes.data || []);
+      setActivityTypes(activityRes.data || []);
+      setBlockActivities(blockActivitiesRes.data || []);
+    } catch (err) {
+      console.error('Error fetching data:', err);
+      alert('Error loading data: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ... existing functions ...
+
+  const addBlockActivity = async (data) => {
+    const { error } = await supabase.from('block_activities').insert([data]);
+    if (error) throw error;
+    await fetchAllData();
+  };
+
+  const deleteBlockActivity = async (id) => {
+    const { error } = await supabase.from('block_activities').delete().eq('id', id);
+    if (error) throw error;
+    await fetchAllData();
+  };
+
   return {
     loading,
     vendors,
     blocks,
     workers,
     activityTypes,
+    blockActivities,
     fetchAllData,
     addVendor,
     updateVendor,
@@ -108,6 +155,8 @@ export function useSupabaseData() {
     deleteBlock,
     addWorker,
     updateWorker,
-    deleteWorker
+    deleteWorker,
+    addBlockActivity,
+    deleteBlockActivity
   };
 }
