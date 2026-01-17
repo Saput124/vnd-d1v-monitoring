@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSupabaseData } from '../hooks/useSupabaseData';
 import MasterData from '../components/MasterData';
 import BlockRegistration from '../components/BlockRegistration';
+import TransactionForm from '../components/TransactionForm';
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
@@ -42,6 +43,7 @@ export default function AdminDashboard() {
               { id: 'dashboard', label: '📊 Dashboard' },
               { id: 'master', label: '💾 Master Data' },
               { id: 'registration', label: '📋 Block Registration' },
+              { id: 'transaction', label: '➕ Input Transaksi' },
             ].map(tab => (
               <button
                 key={tab.id}
@@ -120,6 +122,10 @@ export default function AdminDashboard() {
 
         {activeTab === 'registration' && (
           <BlockRegistration data={data} loading={data.loading} />
+        )}
+        
+        {activeTab === 'transaction' && (  // BARU
+          <TransactionForm data={data} loading={data.loading} />
         )}
       </div>
     </div>
