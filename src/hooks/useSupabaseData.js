@@ -131,6 +131,8 @@ export function useSupabaseData() {
     updateWorker,
     deleteWorker,
     addBlockActivity,
-    deleteBlockActivity
+    deleteBlockActivity,
+    supabase,
+    currentUser: null
   };
 }
