@@ -1,138 +1,57 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '../utils/supabase';
+import { createContext, useContext, useState, useEffect } from 'react';
+import { getCurrentUser, signOut } from '../utils/supabase';
 
-export function useSupabaseData() {
-  const [loading, setLoading] = useState(false);
-  const [vendors, setVendors] = useState([]);
-  const [blocks, setBlocks] = useState([]);
-  const [workers, setWorkers] = useState([]);
-  const [activityTypes, setActivityTypes] = useState([]);
-  const [blockActivities, setBlockActivities] = useState([]);
+const AuthContext = createContext();
 
-  const fetchAllData = async () => {
-    setLoading(true);
-    try {
-      const [vendorsRes, blocksRes, workersRes, activityRes, blockActivitiesRes] = await Promise.all([
-        supabase.from('vendors').select('*').order('name'),
-        supabase.from('blocks').select('*').order('zone, name'),
-        supabase.from('workers').select('*, vendors(name)').order('name'),
-        supabase.from('activity_types').select('*').order('name'),
-        supabase.from('block_activities').select('*').order('target_bulan, created_at')
-      ]);
-
-      if (vendorsRes.error) throw vendorsRes.error;
-      if (blocksRes.error) throw blocksRes.error;
-      if (workersRes.error) throw workersRes.error;
-      if (activityRes.error) throw activityRes.error;
-      if (blockActivitiesRes.error) throw blockActivitiesRes.error;
-
-      setVendors(vendorsRes.data || []);
-      setBlocks(blocksRes.data || []);
-      setWorkers(workersRes.data || []);
-      setActivityTypes(activityRes.data || []);
-      setBlockActivities(blockActivitiesRes.data || []);
-    } catch (err) {
-      console.error('Error fetching data:', err);
-      alert('Error loading data: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchAllData();
+    const currentUser = getCurrentUser();
+    setUser(currentUser);
+    setLoading(false);
   }, []);
 
-  // VENDOR FUNCTIONS
-  const addVendor = async (data) => {
-    const { error } = await supabase.from('vendors').insert([data]);
-    if (error) throw error;
-    await fetchAllData();
+  const login = (userData) => {
+    setUser(userData);
   };
 
-  const updateVendor = async (id, data) => {
-    const { error } = await supabase.from('vendors').update(data).eq('id', id);
-    if (error) throw error;
-    await fetchAllData();
+  const logout = async () => {
+    await signOut();
+    setUser(null);
   };
 
-  const deleteVendor = async (id) => {
-    const { error } = await supabase.from('vendors').delete().eq('id', id);
-    if (error) throw error;
-    await fetchAllData();
-  };
-
-  // BLOCK FUNCTIONS
-  const addBlock = async (data) => {
-    const { error } = await supabase.from('blocks').insert([data]);
-    if (error) throw error;
-    await fetchAllData();
-  };
-
-  const updateBlock = async (id, data) => {
-    const { error } = await supabase.from('blocks').update(data).eq('id', id);
-    if (error) throw error;
-    await fetchAllData();
-  };
-
-  const deleteBlock = async (id) => {
-    const { error } = await supabase.from('blocks').delete().eq('id', id);
-    if (error) throw error;
-    await fetchAllData();
-  };
-
-  // WORKER FUNCTIONS
-  const addWorker = async (data) => {
-    const { error } = await supabase.from('workers').insert([data]);
-    if (error) throw error;
-    await fetchAllData();
-  };
-
-  const updateWorker = async (id, data) => {
-    const { error } = await supabase.from('workers').update(data).eq('id', id);
-    if (error) throw error;
-    await fetchAllData();
-  };
-
-  const deleteWorker = async (id) => {
-    const { error } = await supabase.from('workers').delete().eq('id', id);
-    if (error) throw error;
-    await fetchAllData();
-  };
-
-  // BLOCK ACTIVITY FUNCTIONS
-  const addBlockActivity = async (data) => {
-    const { error } = await supabase.from('block_activities').insert([data]);
-    if (error) throw error;
-    await fetchAllData();
-  };
-
-  const deleteBlockActivity = async (id) => {
-    const { error } = await supabase.from('block_activities').delete().eq('id', id);
-    if (error) throw error;
-    await fetchAllData();
-  };
-
-  return {
+  const value = {
+    user,
+    login,
+    logout,
     loading,
-    vendors,
-    blocks,
-    workers,
-    activityTypes,
-    blockActivities,
-    fetchAllData,
-    addVendor,
-    updateVendor,
-    deleteVendor,
-    addBlock,
-    updateBlock,
-    deleteBlock,
-    addWorker,
-    updateWorker,
-    deleteWorker,
-    addBlockActivity,
-    deleteBlockActivity,
-    supabase,
-    currentUser: null
+    // Role checks
+    isAdmin: user?.role === 'admin',
+    isSectionHead: user?.role === 'section_head',
+    isSupervisor: user?.role === 'supervisor',
+    isVendor: user?.role === 'vendor',
+    // NEW: Section & Vendor info
+    userSection: user?.section_id || null,
+    userVendor: user?.vendor_id || null,
+    // NEW: Access level helper
+    canAccessAllSections: user?.role === 'admin',
+    canManageData: ['admin', 'section_head', 'supervisor'].includes(user?.role),
+    canOnlyViewOwn: user?.role === 'vendor'
   };
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error('useAuth must be used within AuthProvider');
+  }
+  return context;
+};
