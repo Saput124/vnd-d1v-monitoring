@@ -1,7 +1,7 @@
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
-import SectionDashboard from './pages/SectionDashboard';
+import SectionDashboard from './pages/SectionDashboard'; 
 import VendorDashboard from './pages/VendorDashboard';
 
 function AppContent() {
