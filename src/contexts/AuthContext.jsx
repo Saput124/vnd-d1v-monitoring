@@ -1,3 +1,4 @@
+// src/contexts/AuthContext.jsx - UPDATE
 import { createContext, useContext, useState, useEffect } from 'react';
 import { getCurrentUser, signOut } from '../utils/supabase';
 
@@ -32,10 +33,12 @@ export function AuthProvider({ children }) {
     isSectionHead: user?.role === 'section_head',
     isSupervisor: user?.role === 'supervisor',
     isVendor: user?.role === 'vendor',
-    // NEW: Section & Vendor info
+    // Section & Vendor info
     userSection: user?.section_id || null,
+    userSectionName: user?.section_name || null,
     userVendor: user?.vendor_id || null,
-    // NEW: Access level helper
+    userVendorName: user?.vendor_name || null,
+    // Access level helpers
     canAccessAllSections: user?.role === 'admin',
     canManageData: ['admin', 'section_head', 'supervisor'].includes(user?.role),
     canOnlyViewOwn: user?.role === 'vendor'
