@@ -1,3 +1,5 @@
+// src/utils/supabase.js - FIXED VERSION
+
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -8,6 +10,10 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// 🔧 FIX: Gunakan sessionStorage agar tiap tab INDEPENDEN
+// sessionStorage = per tab, localStorage = shared across tabs
+const STORAGE_KEY = 'vnd_user_session';
 
 export const signIn = async (username, password) => {
   try {
@@ -87,14 +93,15 @@ export const signIn = async (username, password) => {
       section_name,
       vendor_id,
       vendor_name,
-      vendor_sections, // Array of sections vendor can access
+      vendor_sections,
       active: userData.active,
       created_at: userData.created_at
     };
     
     console.log('✅ Login Success:', fullUserData);
     
-    localStorage.setItem('vnd_user', JSON.stringify(fullUserData));
+    // 🔧 FIX: Simpan di sessionStorage (per-tab), bukan localStorage
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(fullUserData));
     
     return { data: { user: fullUserData }, error: null };
   } catch (err) {
@@ -107,12 +114,12 @@ export const signIn = async (username, password) => {
 };
 
 export const signOut = async () => {
-  localStorage.removeItem('vnd_user');
+  sessionStorage.removeItem(STORAGE_KEY);
   return { error: null };
 };
 
 export const getCurrentUser = () => {
-  const userStr = localStorage.getItem('vnd_user');
+  const userStr = sessionStorage.getItem(STORAGE_KEY);
   return userStr ? JSON.parse(userStr) : null;
 };
 
