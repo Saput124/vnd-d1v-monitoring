@@ -1,4 +1,6 @@
-import { useState } from 'react';
+// src/components/MasterData.jsx - FIXED WITH SECTION
+
+import { useState, useEffect } from 'react';
 import Modal from './Modal';
 
 export default function MasterData({ data, loading }) {
@@ -7,15 +9,28 @@ export default function MasterData({ data, loading }) {
   const [modalType, setModalType] = useState('');
   const [editData, setEditData] = useState(null);
   const [showBulkModal, setShowBulkModal] = useState(false);
+  const [sections, setSections] = useState([]);
   
   // State untuk bulk import dengan tabel
   const [bulkRows, setBulkRows] = useState([
-    { code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '' }
+    { code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '', section_id: '' }
   ]);
 
-  // ============================================================================
-  // 🆕 TAMBAHAN: Function untuk update single cell (INI YANG KURANG!)
-  // ============================================================================
+  // Fetch sections for dropdown
+  useEffect(() => {
+    const fetchSections = async () => {
+      const { data: sectionsData } = await data.supabase
+        .from('sections')
+        .select('*')
+        .order('name');
+      
+      setSections(sectionsData || []);
+    };
+    
+    fetchSections();
+  }, [data.supabase]);
+
+  // Function untuk update single cell
   const updateBulkRow = (index, field, value) => {
     const newRows = [...bulkRows];
     newRows[index][field] = value;
@@ -56,9 +71,10 @@ export default function MasterData({ data, loading }) {
       alert('❌ Error: ' + err.message);
     }
   };
+
   const parseDecimal = (value) => {
-  if (value === null || value === undefined || value === '') return 0;
-  return parseFloat(value.toString().replace(',', '.'));
+    if (value === null || value === undefined || value === '') return 0;
+    return parseFloat(value.toString().replace(',', '.'));
   };
 
   const handleBlockSubmit = async (e) => {
@@ -70,8 +86,14 @@ export default function MasterData({ data, loading }) {
       zone: formData.get('zone'),
       kategori: formData.get('kategori'),
       varietas: formData.get('varietas'),
-      luas_total: parseDecimal(formData.get('luas_total'))
+      luas_total: parseDecimal(formData.get('luas_total')),
+      section_id: formData.get('section_id') || null
     };
+
+    // Auto-assign section untuk non-admin jika tidak dipilih
+    if (!blockData.section_id && data.currentUser?.role !== 'admin' && data.currentUser?.section_id) {
+      blockData.section_id = data.currentUser.section_id;
+    }
 
     try {
       if (editData) {
@@ -110,13 +132,9 @@ export default function MasterData({ data, loading }) {
     }
   };
 
-  // ============================================================================
-  // 🔄 DIPERBAIKI: Handle paste dari Excel - Smart Paste dengan Auto-Detect
-  // ============================================================================
   const handlePasteFromExcel = (e, startRowIndex = 0, startField = 'code') => {
     e.preventDefault();
     const pastedText = e.clipboardData.getData('text/plain');
-    console.log('📋 Raw pasted text:', pastedText);
     
     if (!pastedText || pastedText.trim() === '') {
       alert('❌ Tidak ada data yang di-paste!');
@@ -124,8 +142,6 @@ export default function MasterData({ data, loading }) {
     }
     
     const lines = pastedText.trim().split('\n');
-    console.log('📝 Total lines:', lines.length);
-    
     const newRows = [];
     const fields = ['code', 'name', 'zone', 'kategori', 'varietas', 'luas_total'];
     const startFieldIndex = fields.indexOf(startField);
@@ -134,100 +150,81 @@ export default function MasterData({ data, loading }) {
       const line = lines[i].trim();
       if (!line) continue;
       
-      console.log(`Processing line ${i}:`, line);
-      
-      // Split by TAB (Excel default) or PIPE
       let cols;
       if (line.includes('\t')) {
         cols = line.split('\t').map(c => c.trim());
-        console.log('Split by TAB:', cols);
       } else if (line.includes('|')) {
         cols = line.split('|').map(c => c.trim());
-        console.log('Split by PIPE:', cols);
       } else {
-        // Single value - paste ke field yang di-klik
         if (startFieldIndex >= 0) {
-          const row = { code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '' };
+          const row = { code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '', section_id: '' };
           row[startField] = line;
           newRows.push(row);
         }
         continue;
       }
       
-      // Skip if looks like header
       const firstCol = (cols[0] || '').toLowerCase();
       if (firstCol.includes('kode') || firstCol.includes('code') ||
           firstCol.includes('nama') || firstCol.includes('name')) {
-        console.log('Skipping header row:', cols);
         continue;
       }
       
-      // Build row object
-      const row = { code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '' };
+      const row = { code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '', section_id: '' };
       
-      // Map columns ke fields, mulai dari startField
       for (let j = 0; j < cols.length && (startFieldIndex + j) < fields.length; j++) {
         const fieldName = fields[startFieldIndex + j];
         row[fieldName] = cols[j] || '';
       }
       
-      // Skip if semua required field kosong
       if (!row.code && !row.name && !row.zone) {
-        console.log('Skipping empty row');
         continue;
       }
       
-      console.log('✅ Valid row:', row);
       newRows.push(row);
     }
-
-    console.log('Final valid rows:', newRows);
     
     if (newRows.length === 0) {
-      alert('❌ Tidak ada data valid yang berhasil di-parse!\n\nPastikan format:\n- Copy dari Excel (6 kolom: Kode, Nama, Zone, Kategori, Varietas, Luas)\n- Atau gunakan format: KODE | NAMA | ZONE | KATEGORI | VARIETAS | LUAS');
+      alert('❌ Tidak ada data valid yang berhasil di-parse!');
       return;
     }
     
-    // Replace from startRowIndex atau replace all jika paste di baris pertama
     if (startRowIndex === 0) {
       setBulkRows(newRows);
     } else {
       const updatedRows = [...bulkRows];
       updatedRows.splice(startRowIndex, Math.min(newRows.length, updatedRows.length - startRowIndex), ...newRows);
-      // Tambah baris baru jika paste data lebih banyak
       if (newRows.length > updatedRows.length - startRowIndex) {
         updatedRows.push(...newRows.slice(updatedRows.length - startRowIndex));
       }
       setBulkRows(updatedRows);
     }
     
-    alert(`✅ Berhasil paste ${newRows.length} baris!\n\nSilakan periksa data, lalu klik Import.`);
+    alert(`✅ Berhasil paste ${newRows.length} baris!`);
   };
 
-  // Add row
   const addBulkRow = () => {
-    setBulkRows([...bulkRows, { code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '' }]);
+    setBulkRows([...bulkRows, { code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '', section_id: '' }]);
   };
 
-  // Remove row
   const removeBulkRow = (index) => {
     if (bulkRows.length > 1) {
       setBulkRows(bulkRows.filter((_, i) => i !== index));
     }
   };
 
-  // Bulk import dari tabel
   const handleBulkImport = async () => {
     const validRows = bulkRows.filter(row => row.code && row.name && row.zone);
-   const parseDecimal = (value) => {
-  if (value === null || value === undefined || value === '') return 0;
-  return parseFloat(value.toString().replace(',', '.'));
-};
- 
+    
     if (validRows.length === 0) {
       alert('❌ Tidak ada data yang valid untuk diimport!');
       return;
     }
+
+    // Default section untuk bulk import (non-admin)
+    const defaultSectionId = data.currentUser?.role !== 'admin' && data.currentUser?.section_id
+      ? data.currentUser.section_id
+      : null;
 
     try {
       for (const row of validRows) {
@@ -237,13 +234,14 @@ export default function MasterData({ data, loading }) {
           zone: row.zone,
           kategori: row.kategori,
           varietas: row.varietas,
-          luas_total: parseDecimal(row.luas_total) || 0
+          luas_total: parseDecimal(row.luas_total) || 0,
+          section_id: row.section_id || defaultSectionId
         });
       }
 
       alert(`✅ Berhasil import ${validRows.length} blok!`);
       setShowBulkModal(false);
-      setBulkRows([{ code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '' }]);
+      setBulkRows([{ code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '', section_id: '' }]);
     } catch (err) {
       alert('❌ Error: ' + err.message);
     }
@@ -308,7 +306,7 @@ export default function MasterData({ data, loading }) {
         </div>
       </div>
 
-      {/* Vendors Tab */}
+      {/* Vendors Tab - NO CHANGES */}
       {activeTab === 'vendors' && (
         <div className="bg-white rounded-lg shadow-md p-6">
           <div className="flex justify-between items-center mb-6">
@@ -365,91 +363,107 @@ export default function MasterData({ data, loading }) {
         </div>
       )}
 
-      {/* Blocks Tab */}
+      {/* Blocks Tab - WITH SECTION COLUMN */}
       {activeTab === 'blocks' && (
         <div className="bg-white rounded-lg shadow-md p-6">
           <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-sm text-blue-800">
-              ℹ️ <strong>Master Data Blok</strong> hanya berisi data fisik blok kebun (kode, nama, zone, luas). 
-              Untuk registrasi blok ke aktivitas (Tanam, Kelentek, dll), gunakan tab <strong>"Block Registration"</strong>.
+              ℹ️ <strong>Master Data Blok</strong> adalah pool blok divisi yang bisa diakses semua section. 
+              Section "mengklaim" blok via <strong>Block Registration</strong> untuk aktivitas mereka.
+              1 blok fisik bisa di-registrasi untuk multiple aktivitas berbeda.
             </p>
           </div>
 
           <div className="flex justify-between items-center mb-6">
-            <h3 className="text-xl font-bold text-gray-800">🗺️ Daftar Blok (Physical)</h3>
+            <h3 className="text-xl font-bold text-gray-800">🗺️ Master Blok Divisi (Pool)</h3>
             <div className="flex gap-2">
-              <button
-                onClick={() => setShowBulkModal(true)}
-                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-semibold"
-              >
-                📋 Bulk Import
-              </button>
-              <button
-                onClick={() => openModal('block')}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-semibold"
-              >
-                ➕ Tambah Blok
-              </button>
+              {(data.currentUser?.role === 'admin' || ['section_head', 'supervisor'].includes(data.currentUser?.role)) && (
+                <>
+                  <button
+                    onClick={() => setShowBulkModal(true)}
+                    className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-semibold"
+                  >
+                    📋 Bulk Import
+                  </button>
+                  <button
+                    onClick={() => openModal('block')}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-semibold"
+                  >
+                    ➕ Tambah Blok
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-gray-100 border-b">
-                  <th className="px-4 py-3 text-left text-sm font-semibold">No</th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold">Kode</th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold">Nama Blok</th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold">Zone</th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold">Kategori</th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold">Varietas</th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold">Luas Total (Ha)</th>
-                  <th className="px-4 py-3 text-left text-sm font-semibold">Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.blocks.map((block, i) => (
-                  <tr key={block.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                    <td className="px-4 py-3 text-sm">{i + 1}</td>
-                    <td className="px-4 py-3 text-sm font-mono">{block.code}</td>
-                    <td className="px-4 py-3 text-sm font-semibold">{block.name}</td>
-                    <td className="px-4 py-3 text-sm">{block.zone}</td>
-                    <td className="px-4 py-3 text-sm">
-                      <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                        block.kategori === 'PC' ? 'bg-green-100 text-green-800' : 
-                        block.kategori === 'RC' ? 'bg-blue-100 text-blue-800' : 
-                        'bg-purple-100 text-purple-800'
-                      }`}>
-                        {block.kategori || '-'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-sm">{block.varietas || '-'}</td>
-                    <td className="px-4 py-3 text-sm font-semibold text-blue-600">{block.luas_total} Ha</td>
-                    <td className="px-4 py-3 text-sm">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => openModal('block', block)}
-                          className="text-blue-600 hover:text-blue-800 font-semibold"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          onClick={() => handleDelete('block', block.id, block.name)}
-                          className="text-red-600 hover:text-red-800 font-semibold"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    </td>
+          {data.blocks.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              {data.currentUser?.role === 'vendor' 
+                ? 'Vendor tidak perlu akses Master Blocks. Gunakan Block Registration untuk input transaksi.'
+                : 'Belum ada master blocks. Klik "Tambah Blok" untuk menambahkan.'
+              }
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-gray-100 border-b">
+                    <th className="px-4 py-3 text-left text-sm font-semibold">No</th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold">Kode</th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold">Nama Blok</th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold">Zone</th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold">Kategori</th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold">Varietas</th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold">Luas (Ha)</th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold">Aksi</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {data.blocks.map((block, i) => (
+                    <tr key={block.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                      <td className="px-4 py-3 text-sm">{i + 1}</td>
+                      <td className="px-4 py-3 text-sm font-mono">{block.code}</td>
+                      <td className="px-4 py-3 text-sm font-semibold">{block.name}</td>
+                      <td className="px-4 py-3 text-sm">{block.zone}</td>
+                      <td className="px-4 py-3 text-sm">
+                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                          block.kategori === 'PC' ? 'bg-green-100 text-green-800' : 
+                          block.kategori === 'RC' ? 'bg-blue-100 text-blue-800' : 
+                          'bg-purple-100 text-purple-800'
+                        }`}>
+                          {block.kategori || '-'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm">{block.varietas || '-'}</td>
+                      <td className="px-4 py-3 text-sm font-semibold text-blue-600">{block.luas_total} Ha</td>
+                      <td className="px-4 py-3 text-sm">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => openModal('block', block)}
+                            className="text-blue-600 hover:text-blue-800 font-semibold"
+                          >
+                            ✏️
+                          </button>
+                          {data.currentUser?.role === 'admin' && (
+                            <button
+                              onClick={() => handleDelete('block', block.id, block.name)}
+                              className="text-red-600 hover:text-red-800 font-semibold"
+                            >
+                              🗑️
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div> 
       )}
 
-      {/* Workers Tab */}
+      {/* Workers Tab - NO CHANGES... (rest of component continues) */}
       {activeTab === 'workers' && (
         <div className="bg-white rounded-lg shadow-md p-6">
           <div className="flex justify-between items-center mb-6">
@@ -504,7 +518,7 @@ export default function MasterData({ data, loading }) {
         </div>
       )}
 
-      {/* Modal: Vendor */}
+      {/* Modal: Vendor - NO CHANGES */}
       <Modal show={showModal && modalType === 'vendor'} onClose={closeModal} title={editData ? 'Edit Vendor' : 'Tambah Vendor'}>
         <form onSubmit={handleVendorSubmit} className="space-y-4">
           <div>
@@ -530,9 +544,32 @@ export default function MasterData({ data, loading }) {
         </form>
       </Modal>
 
-      {/* Modal: Block */}
+      {/* Modal: Block - WITH SECTION DROPDOWN */}
       <Modal show={showModal && modalType === 'block'} onClose={closeModal} title={editData ? 'Edit Blok' : 'Tambah Blok'}>
         <form onSubmit={handleBlockSubmit} className="space-y-4">
+          {/* Section Assignment */}
+          {data.currentUser?.role === 'admin' && (
+            <div>
+              <label className="block text-sm font-medium mb-2">Section *</label>
+              <select name="section_id" defaultValue={editData?.section_id || ''} required className="w-full px-4 py-2 border rounded-lg">
+                <option value="">-- Pilih Section --</option>
+                {sections.map(s => (
+                  <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">⚠️ Pilih section tempat blok ini berada</p>
+            </div>
+          )}
+
+          {data.currentUser?.role !== 'admin' && data.currentUser?.section_name && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <p className="text-sm text-blue-800">
+                <strong>Section:</strong> {data.currentUser.section_name}
+                <input type="hidden" name="section_id" value={data.currentUser.section_id} />
+              </p>
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium mb-2">Kode Blok</label>
             <input name="code" defaultValue={editData?.code || ''} required className="w-full px-4 py-2 border rounded-lg" placeholder="BLOK-001" />
@@ -574,7 +611,6 @@ export default function MasterData({ data, loading }) {
               <option value="PS862" />
               <option value="PS864" />
             </datalist>
-            <p className="text-xs text-gray-500 mt-1">💡 Ketik manual atau pilih dari saran</p>
           </div>
 
           <div>
@@ -615,7 +651,7 @@ export default function MasterData({ data, loading }) {
         </form>
       </Modal>
 
-      {/* Modal: Bulk Import - COMPLETELY REDESIGNED */}
+      {/* Modal: Bulk Import */}
       <Modal show={showBulkModal} onClose={() => setShowBulkModal(false)} title="📋 Bulk Import Blok">
         <div className="space-y-4">
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm space-y-2">
@@ -628,46 +664,6 @@ export default function MasterData({ data, loading }) {
               <li>Data otomatis terisi ke semua baris & kolom</li>
               <li>Periksa data, lalu klik <strong>Import</strong></li>
             </ol>
-            
-            <div className="bg-white border border-blue-300 rounded p-2 mt-2">
-              <p className="text-xs font-semibold text-blue-900 mb-1">Contoh format Excel:</p>
-              <table className="w-full text-xs font-mono">
-                <thead className="bg-gray-100">
-                  <tr>
-                    <td className="px-1 py-1 border">Kode</td>
-                    <td className="px-1 py-1 border">Nama</td>
-                    <td className="px-1 py-1 border">Zone</td>
-                    <td className="px-1 py-1 border">Kategori</td>
-                    <td className="px-1 py-1 border">Varietas</td>
-                    <td className="px-1 py-1 border">Luas</td>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td className="px-1 py-1 border">BLOK-011</td>
-                    <td className="px-1 py-1 border">Blok K</td>
-                    <td className="px-1 py-1 border">Zone 1</td>
-                    <td className="px-1 py-1 border">PC</td>
-                    <td className="px-1 py-1 border">PS881</td>
-                    <td className="px-1 py-1 border">7.5</td>
-                  </tr>
-                  <tr>
-                    <td className="px-1 py-1 border">BLOK-012</td>
-                    <td className="px-1 py-1 border">Blok L</td>
-                    <td className="px-1 py-1 border">Zone 2</td>
-                    <td className="px-1 py-1 border">RC</td>
-                    <td className="px-1 py-1 border">PS862</td>
-                    <td className="px-1 py-1 border">8.0</td>
-                  </tr>
-                </tbody>
-              </table>
-              <p className="text-xs text-blue-700 mt-1">👆 Select semua data (tanpa header), lalu Copy-Paste</p>
-            </div>
-            
-            <p className="text-xs text-blue-700 mt-2">
-              💡 <strong>Tips:</strong> Jika paste tidak berhasil, coba format manual dengan separator | (pipe):<br/>
-              <span className="font-mono bg-white px-1 rounded">BLOK-011 | Blok K | Zone 1 | PC | PS881 | 7.5</span>
-            </p>
           </div>
 
           <div className="overflow-x-auto max-h-96 border rounded-lg">
@@ -681,6 +677,9 @@ export default function MasterData({ data, loading }) {
                   <th className="px-2 py-2 text-left font-semibold">Kategori</th>
                   <th className="px-2 py-2 text-left font-semibold">Varietas</th>
                   <th className="px-2 py-2 text-left font-semibold">Luas (Ha)</th>
+                  {data.currentUser?.role === 'admin' && (
+                    <th className="px-2 py-2 text-left font-semibold">Section</th>
+                  )}
                   <th className="px-2 py-2 text-left font-semibold">Aksi</th>
                 </tr>
               </thead>
@@ -750,6 +749,20 @@ export default function MasterData({ data, loading }) {
                         placeholder="8.00"
                       />
                     </td>
+                    {data.currentUser?.role === 'admin' && (
+                      <td className="px-2 py-2">
+                        <select
+                          value={row.section_id}
+                          onChange={(e) => updateBulkRow(index, 'section_id', e.target.value)}
+                          className="w-full px-2 py-1 border rounded text-sm"
+                        >
+                          <option value="">--</option>
+                          {sections.map(s => (
+                            <option key={s.id} value={s.id}>{s.code}</option>
+                          ))}
+                        </select>
+                      </td>
+                    )}
                     <td className="px-2 py-2">
                       <button
                         type="button"
@@ -783,7 +796,7 @@ export default function MasterData({ data, loading }) {
             <button
               onClick={() => {
                 setShowBulkModal(false);
-                setBulkRows([{ code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '' }]);
+                setBulkRows([{ code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '', section_id: '' }]);
               }}
               className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400"
             >
