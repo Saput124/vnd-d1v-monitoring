@@ -4,6 +4,7 @@ import { useSupabaseData } from '../hooks/useSupabaseData';
 import MasterData from '../components/MasterData';
 import BlockRegistration from '../components/BlockRegistration';
 import TransactionForm from '../components/TransactionForm';
+import UserManagement from '../components/UserManagement';
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
@@ -41,6 +42,7 @@ export default function AdminDashboard() {
           <div className="flex space-x-1 overflow-x-auto">
             {[
               { id: 'dashboard', label: '📊 Dashboard' },
+              { id: 'users', label: '👥 User Management' },
               { id: 'master', label: '💾 Master Data' },
               { id: 'registration', label: '📋 Block Registration' },
               { id: 'transaction', label: '➕ Input Transaksi' },
@@ -114,6 +116,10 @@ export default function AdminDashboard() {
               </ul>
             </div>
           </div>
+        )}
+
+        {activeTab === 'users' && (  {/* ← KONTEN BARU */}
+          <UserManagement />
         )}
 
         {activeTab === 'master' && (
