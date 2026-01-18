@@ -11,15 +11,19 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export const signIn = async (username, password) => {
   try {
-    // 1. Get user data
+    // 1. Get user data with section info
     const { data: userData, error: userError } = await supabase
       .from('users')
-      .select('*')
+      .select(`
+        *,
+        sections(id, code, name)
+      `)
       .eq('username', username)
       .eq('active', true)
       .single();
     
     if (userError || !userData) {
+      console.error('User not found:', userError);
       return { 
         data: null, 
         error: { message: 'Username tidak ditemukan atau tidak aktif' } 
@@ -36,11 +40,12 @@ export const signIn = async (username, password) => {
     
     // 3. Initialize additional data
     let vendor_id = null;
-    let section_id = null;
     let vendor_name = null;
-    let section_name = null;
+    let vendor_sections = [];
+    let section_id = userData.section_id || null;
+    let section_name = userData.sections?.name || null;
     
-    // 4. Get vendor_id if user is vendor
+    // 4. Get vendor info if user is vendor
     if (userData.role === 'vendor') {
       const { data: vendorData, error: vendorError } = await supabase
         .from('user_vendors')
@@ -50,8 +55,10 @@ export const signIn = async (username, password) => {
             id,
             name,
             code,
-            section_id,
-            sections(id, code, name)
+            vendor_sections(
+              section_id,
+              sections(id, code, name)
+            )
           )
         `)
         .eq('user_id', userData.id)
@@ -60,44 +67,32 @@ export const signIn = async (username, password) => {
       if (!vendorError && vendorData) {
         vendor_id = vendorData.vendor_id;
         vendor_name = vendorData.vendors.name;
-        section_id = vendorData.vendors.section_id;
-        section_name = vendorData.vendors.sections?.name;
+        vendor_sections = vendorData.vendors.vendor_sections?.map(vs => ({
+          id: vs.sections.id,
+          code: vs.sections.code,
+          name: vs.sections.name
+        })) || [];
       }
     }
     
-    // 5. Get section_id if user is section_head or supervisor
-    if (userData.role === 'section_head' || userData.role === 'supervisor') {
-      const { data: sectionData, error: sectionError } = await supabase
-        .from('user_sections')
-        .select(`
-          section_id,
-          sections!inner(id, code, name)
-        `)
-        .eq('user_id', userData.id)
-        .single();
-      
-      if (!sectionError && sectionData) {
-        section_id = sectionData.section_id;
-        section_name = sectionData.sections.name;
-      }
-    }
-    
-    // 6. Combine all data
+    // 5. Combine all data
     const fullUserData = {
-      ...userData,
+      id: userData.id,
+      username: userData.username,
+      full_name: userData.full_name,
+      email: userData.email,
+      phone: userData.phone,
+      role: userData.role,
+      section_id,
+      section_name,
       vendor_id,
       vendor_name,
-      section_id,
-      section_name
+      vendor_sections, // Array of sections vendor can access
+      active: userData.active,
+      created_at: userData.created_at
     };
     
-    console.log('✅ Login Success:', {
-      username: fullUserData.username,
-      role: fullUserData.role,
-      vendor_id: fullUserData.vendor_id,
-      section_id: fullUserData.section_id,
-      section_name: fullUserData.section_name
-    });
+    console.log('✅ Login Success:', fullUserData);
     
     localStorage.setItem('vnd_user', JSON.stringify(fullUserData));
     
