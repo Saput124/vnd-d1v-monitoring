@@ -1,5 +1,15 @@
 import { useState, useMemo } from 'react';
 
+useEffect(() => {
+    // Auto-fill vendor_id untuk vendor login
+    if (data.currentUser?.role === 'vendor' && data.currentUser?.vendor_id) {
+      setFormData(prev => ({
+        ...prev,
+        vendor_id: data.currentUser.vendor_id
+      }));
+    }
+  }, [data.currentUser]);
+  
 export default function TransactionForm({ data, loading }) {
   const [formData, setFormData] = useState({
     tanggal: new Date().toISOString().split('T')[0],
@@ -366,25 +376,36 @@ export default function TransactionForm({ data, loading }) {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2">Vendor *</label>
-              <select
-                value={formData.vendor_id}
-                onChange={(e) => setFormData({
-                  ...formData, 
-                  vendor_id: e.target.value,
-                  selectedWorkers: [],
-                  workerMode: 'manual',
-                  jumlahPekerja: ''
-                })}
-                className="w-full px-4 py-2 border rounded-lg"
-                required
-              >
-                <option value="">-- Pilih Vendor --</option>
-                {data.vendors.map(v => (
-                  <option key={v.id} value={v.id}>{v.name}</option>
-                ))}
-              </select>
-            </div>
+  <label className="block text-sm font-medium mb-2">Vendor *</label>
+  {data.currentUser?.role === 'vendor' ? (
+    // Vendor role: auto-fill, tidak bisa pilih vendor lain
+    <input
+      type="text"
+      value={data.vendors.find(v => v.id === data.currentUser?.vendor_id)?.name || 'Loading...'}
+      className="w-full px-4 py-2 border rounded-lg bg-gray-100"
+      disabled
+    />
+  ) : (
+    // Admin/Supervisor: bisa pilih vendor
+    <select
+      value={formData.vendor_id}
+      onChange={(e) => setFormData({
+        ...formData, 
+        vendor_id: e.target.value,
+        selectedWorkers: [],
+        workerMode: 'manual',
+        jumlahPekerja: ''
+      })}
+      className="w-full px-4 py-2 border rounded-lg"
+      required
+    >
+      <option value="">-- Pilih Vendor --</option>
+      {data.vendors.map(v => (
+        <option key={v.id} value={v.id}>{v.name}</option>
+      ))}
+    </select>
+  )}
+</div>
 
             <div>
               <label className="block text-sm font-medium mb-2">Aktivitas *</label>
