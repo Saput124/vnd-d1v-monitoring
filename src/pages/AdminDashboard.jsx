@@ -118,7 +118,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {activeTab === 'users' && (  {/* ← KONTEN BARU */}
+        {activeTab === 'users' && (
           <UserManagement />
         )}
 
@@ -130,7 +130,7 @@ export default function AdminDashboard() {
           <BlockRegistration data={data} loading={data.loading} />
         )}
         
-        {activeTab === 'transaction' && (  // BARU
+        {activeTab === 'transaction' && (
           <TransactionForm data={data} loading={data.loading} />
         )}
       </div>
