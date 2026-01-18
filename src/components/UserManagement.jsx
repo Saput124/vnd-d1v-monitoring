@@ -18,15 +18,13 @@ export default function UserManagement() {
     role: 'vendor',
     section_id: null,
     vendor_id: null,
-    vendor_sections: [], // For vendor role: which sections they can work in
+    vendor_sections: [],
     active: true
   });
 
-  // Fetch all data
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Get users with their relations
       const { data: usersData, error: usersError } = await supabase
         .from('users')
         .select(`
@@ -42,7 +40,6 @@ export default function UserManagement() {
 
       if (usersError) throw usersError;
 
-      // Get vendors with their sections
       const { data: vendorsData, error: vendorsError } = await supabase
         .from('vendors')
         .select(`
@@ -56,7 +53,6 @@ export default function UserManagement() {
 
       if (vendorsError) throw vendorsError;
 
-      // Get sections
       const { data: sectionsData, error: sectionsError } = await supabase
         .from('sections')
         .select('*')
@@ -79,7 +75,6 @@ export default function UserManagement() {
     fetchData();
   }, []);
 
-  // Open modal for new user
   const handleNew = () => {
     setFormData({
       id: null,
@@ -98,9 +93,7 @@ export default function UserManagement() {
     setShowModal(true);
   };
 
-  // Open modal for edit
   const handleEdit = async (user) => {
-    // Get vendor sections if user is vendor
     let vendorSections = [];
     if (user.role === 'vendor' && user.user_vendors?.[0]?.vendor_id) {
       const { data } = await supabase
@@ -114,7 +107,7 @@ export default function UserManagement() {
     setFormData({
       id: user.id,
       username: user.username,
-      password_hash: '', // Don't show password
+      password_hash: '',
       full_name: user.full_name,
       email: user.email || '',
       phone: user.phone || '',
@@ -128,10 +121,8 @@ export default function UserManagement() {
     setShowModal(true);
   };
 
-  // Save user
   const handleSave = async () => {
     try {
-      // Validation
       if (!formData.username || !formData.full_name || !formData.role) {
         alert('❌ Username, Full Name, dan Role harus diisi!');
         return;
@@ -142,7 +133,6 @@ export default function UserManagement() {
         return;
       }
 
-      // Role-specific validation
       if ((formData.role === 'section_head' || formData.role === 'supervisor') && !formData.section_id) {
         alert('❌ Kepala Seksi/Supervisor harus di-assign ke section!');
         return;
@@ -161,7 +151,6 @@ export default function UserManagement() {
       setLoading(true);
 
       if (editMode) {
-        // Update user
         const updateData = {
           full_name: formData.full_name,
           email: formData.email,
@@ -182,26 +171,16 @@ export default function UserManagement() {
 
         if (updateError) throw updateError;
 
-        // Update user_vendors if vendor
         if (formData.role === 'vendor') {
-          // Delete old mapping
-          await supabase
-            .from('user_vendors')
-            .delete()
-            .eq('user_id', formData.id);
+          await supabase.from('user_vendors').delete().eq('user_id', formData.id);
 
-          // Insert new mapping
           if (formData.vendor_id) {
             await supabase
               .from('user_vendors')
               .insert([{ user_id: formData.id, vendor_id: formData.vendor_id }]);
           }
 
-          // Update vendor sections
-          await supabase
-            .from('vendor_sections')
-            .delete()
-            .eq('vendor_id', formData.vendor_id);
+          await supabase.from('vendor_sections').delete().eq('vendor_id', formData.vendor_id);
 
           if (formData.vendor_sections.length > 0) {
             const vendorSectionInserts = formData.vendor_sections.map(sectionId => ({
@@ -209,15 +188,12 @@ export default function UserManagement() {
               section_id: sectionId
             }));
 
-            await supabase
-              .from('vendor_sections')
-              .insert(vendorSectionInserts);
+            await supabase.from('vendor_sections').insert(vendorSectionInserts);
           }
         }
 
         alert('✅ User berhasil diupdate!');
       } else {
-        // Insert new user
         const { data: newUser, error: insertError } = await supabase
           .from('users')
           .insert([{
@@ -235,22 +211,18 @@ export default function UserManagement() {
 
         if (insertError) throw insertError;
 
-        // Insert user_vendors if vendor
         if (formData.role === 'vendor' && formData.vendor_id) {
           await supabase
             .from('user_vendors')
             .insert([{ user_id: newUser.id, vendor_id: formData.vendor_id }]);
 
-          // Insert vendor sections
           if (formData.vendor_sections.length > 0) {
             const vendorSectionInserts = formData.vendor_sections.map(sectionId => ({
               vendor_id: formData.vendor_id,
               section_id: sectionId
             }));
 
-            await supabase
-              .from('vendor_sections')
-              .insert(vendorSectionInserts);
+            await supabase.from('vendor_sections').insert(vendorSectionInserts);
           }
         }
 
@@ -267,7 +239,6 @@ export default function UserManagement() {
     }
   };
 
-  // Delete user
   const handleDelete = async (userId, username) => {
     if (!confirm(`❓ Hapus user "${username}"?\n\nPeringatan: Ini akan menghapus semua relasi user ini!`)) {
       return;
@@ -275,14 +246,8 @@ export default function UserManagement() {
 
     try {
       setLoading(true);
-
-      const { error } = await supabase
-        .from('users')
-        .delete()
-        .eq('id', userId);
-
+      const { error } = await supabase.from('users').delete().eq('id', userId);
       if (error) throw error;
-
       alert('✅ User berhasil dihapus!');
       await fetchData();
     } catch (err) {
@@ -293,7 +258,6 @@ export default function UserManagement() {
     }
   };
 
-  // Toggle vendor section
   const toggleVendorSection = (sectionId) => {
     setFormData(prev => ({
       ...prev,
@@ -303,7 +267,6 @@ export default function UserManagement() {
     }));
   };
 
-  // Get role badge color
   const getRoleBadge = (role) => {
     const badges = {
       admin: 'bg-red-100 text-red-800',
@@ -334,7 +297,6 @@ export default function UserManagement() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">👥 User Management</h2>
@@ -348,7 +310,6 @@ export default function UserManagement() {
         </button>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <p className="text-sm text-red-600 font-semibold">Admin</p>
@@ -376,96 +337,102 @@ export default function UserManagement() {
         </div>
       </div>
 
-      {/* Users Table */}
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gradient-to-r from-blue-600 to-green-600 text-white">
-            <tr>
-              <th className="px-6 py-4 text-left font-semibold">Username</th>
-              <th className="px-6 py-4 text-left font-semibold">Full Name</th>
-              <th className="px-6 py-4 text-left font-semibold">Role</th>
-              <th className="px-6 py-4 text-left font-semibold">Assignment</th>
-              <th className="px-6 py-4 text-left font-semibold">Contact</th>
-              <th className="px-6 py-4 text-left font-semibold">Status</th>
-              <th className="px-6 py-4 text-center font-semibold">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((user, idx) => (
-              <tr key={user.id} className={`border-t hover:bg-gray-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
-                <td className="px-6 py-4">
-                  <div className="font-mono text-sm font-semibold">{user.username}</div>
-                  <div className="text-xs text-gray-500">ID: {user.id.substring(0, 8)}...</div>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="font-medium">{user.full_name}</div>
-                </td>
-                <td className="px-6 py-4">
-                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getRoleBadge(user.role)}`}>
-                    {getRoleLabel(user.role)}
-                  </span>
-                </td>
-                <td className="px-6 py-4">
-                  {user.role === 'admin' && (
-                    <span className="text-gray-500 text-sm italic">All Access</span>
-                  )}
-                  {(user.role === 'section_head' || user.role === 'supervisor') && (
-                    <div className="text-sm">
-                      <span className="font-semibold text-blue-600">
-                        {user.sections?.name || '-'}
-                      </span>
-                    </div>
-                  )}
-                  {user.role === 'vendor' && (
-                    <div className="text-sm">
-                      <div className="font-semibold text-green-600">
-                        {user.user_vendors?.[0]?.vendors?.name || '-'}
-                      </div>
-                      {user.user_vendors?.[0]?.vendor_id && (
-                        <VendorSections vendorId={user.user_vendors[0].vendor_id} />
-                      )}
-                    </div>
-                  )}
-                </td>
-                <td className="px-6 py-4 text-sm">
-                  <div>{user.email || '-'}</div>
-                  <div className="text-gray-500">{user.phone || '-'}</div>
-                </td>
-                <td className="px-6 py-4">
-                  {user.active ? (
-                    <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-semibold">
-                      ✓ Active
-                    </span>
-                  ) : (
-                    <span className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-semibold">
-                      ✗ Inactive
-                    </span>
-                  )}
-                </td>
-                <td className="px-6 py-4">
-                  <div className="flex gap-2 justify-center">
-                    <button
-                      onClick={() => handleEdit(user)}
-                      className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
-                    >
-                      ✏️ Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(user.id, user.username)}
-                      className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-sm"
-                      disabled={user.role === 'admin' && users.filter(u => u.role === 'admin').length === 1}
-                    >
-                      🗑️ Delete
-                    </button>
-                  </div>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gradient-to-r from-blue-600 to-green-600 text-white">
+              <tr>
+                <th className="px-6 py-4 text-left font-semibold">Username</th>
+                <th className="px-6 py-4 text-left font-semibold">Full Name</th>
+                <th className="px-6 py-4 text-left font-semibold">Role</th>
+                <th className="px-6 py-4 text-left font-semibold">Assignment</th>
+                <th className="px-6 py-4 text-left font-semibold">Contact</th>
+                <th className="px-6 py-4 text-left font-semibold">Status</th>
+                <th className="px-6 py-4 text-center font-semibold">Action</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {users.map((user, idx) => (
+                <tr key={user.id} className={`border-t hover:bg-gray-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                  <td className="px-6 py-4">
+                    <div className="font-mono text-sm font-semibold">{user.username}</div>
+                    <div className="text-xs text-gray-500">ID: {user.id.substring(0, 8)}...</div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="font-medium">{user.full_name}</div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getRoleBadge(user.role)}`}>
+                      {getRoleLabel(user.role)}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    {user.role === 'admin' && (
+                      <span className="text-gray-500 text-sm italic">All Access</span>
+                    )}
+                    {(user.role === 'section_head' || user.role === 'supervisor') && (
+                      <div className="text-sm">
+                        <span className="font-semibold text-blue-600">
+                          {user.sections?.name || '-'}
+                        </span>
+                      </div>
+                    )}
+                    {user.role === 'vendor' && (
+                      <div className="text-sm">
+                        <div className="font-semibold text-green-600">
+                          {user.user_vendors?.[0]?.vendors?.name || '-'}
+                        </div>
+                        {user.user_vendors?.[0]?.vendor_id && (
+                          <VendorSections vendorId={user.user_vendors[0].vendor_id} />
+                        )}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 text-sm">
+                    <div>{user.email || '-'}</div>
+                    <div className="text-gray-500">{user.phone || '-'}</div>
+                  </td>
+                  <td className="px-6 py-4">
+                    {user.active ? (
+                      <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-semibold">
+                        ✓ Active
+                      </span>
+                    ) : (
+                      <span className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-semibold">
+                        ✗ Inactive
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex gap-2 justify-center">
+                      <button
+                        onClick={() => handleEdit(user)}
+                        className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+                      >
+                        ✏️ Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(user.id, user.username)}
+                        className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-sm"
+                        disabled={user.role === 'admin' && users.filter(u => u.role === 'admin').length === 1}
+                      >
+                        🗑️ Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {users.length === 0 && !loading && (
+          <div className="text-center py-12 text-gray-500">
+            Belum ada user. Klik "Tambah User Baru" untuk memulai.
+          </div>
+        )}
       </div>
 
-      {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -476,7 +443,6 @@ export default function UserManagement() {
             </div>
 
             <div className="p-6 space-y-4">
-              {/* Username & Password */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-2">Username *</label>
@@ -484,7 +450,7 @@ export default function UserManagement() {
                     type="text"
                     value={formData.username}
                     onChange={(e) => setFormData({...formData, username: e.target.value})}
-                    className="w-full px-4 py-2 border rounded-lg"
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="username_login"
                     disabled={editMode}
                     required
@@ -498,26 +464,24 @@ export default function UserManagement() {
                     type="text"
                     value={formData.password_hash}
                     onChange={(e) => setFormData({...formData, password_hash: e.target.value})}
-                    className="w-full px-4 py-2 border rounded-lg"
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder={editMode ? 'Biarkan kosong jika tidak diubah' : 'password123'}
                   />
                 </div>
               </div>
 
-              {/* Full Name */}
               <div>
                 <label className="block text-sm font-medium mb-2">Full Name *</label>
                 <input
                   type="text"
                   value={formData.full_name}
                   onChange={(e) => setFormData({...formData, full_name: e.target.value})}
-                  className="w-full px-4 py-2 border rounded-lg"
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Nama Lengkap"
                   required
                 />
               </div>
 
-              {/* Email & Phone */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-2">Email</label>
@@ -525,7 +489,7 @@ export default function UserManagement() {
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({...formData, email: e.target.value})}
-                    className="w-full px-4 py-2 border rounded-lg"
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="email@example.com"
                   />
                 </div>
@@ -535,13 +499,12 @@ export default function UserManagement() {
                     type="text"
                     value={formData.phone}
                     onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                    className="w-full px-4 py-2 border rounded-lg"
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="08123456789"
                   />
                 </div>
               </div>
 
-              {/* Role */}
               <div>
                 <label className="block text-sm font-medium mb-2">Role *</label>
                 <select
@@ -553,7 +516,7 @@ export default function UserManagement() {
                     vendor_id: null,
                     vendor_sections: []
                   })}
-                  className="w-full px-4 py-2 border rounded-lg"
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   required
                 >
                   <option value="admin">Admin (Full Access)</option>
@@ -563,14 +526,13 @@ export default function UserManagement() {
                 </select>
               </div>
 
-              {/* Section Assignment (for section_head & supervisor) */}
               {(formData.role === 'section_head' || formData.role === 'supervisor') && (
                 <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <label className="block text-sm font-medium mb-2">Assign to Section *</label>
                   <select
                     value={formData.section_id || ''}
                     onChange={(e) => setFormData({...formData, section_id: e.target.value || null})}
-                    className="w-full px-4 py-2 border rounded-lg"
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     required
                   >
                     <option value="">-- Pilih Section --</option>
@@ -581,7 +543,6 @@ export default function UserManagement() {
                 </div>
               )}
 
-              {/* Vendor Assignment */}
               {formData.role === 'vendor' && (
                 <div className="space-y-4 p-4 bg-green-50 border border-green-200 rounded-lg">
                   <div>
@@ -589,7 +550,7 @@ export default function UserManagement() {
                     <select
                       value={formData.vendor_id || ''}
                       onChange={(e) => setFormData({...formData, vendor_id: e.target.value || null})}
-                      className="w-full px-4 py-2 border rounded-lg"
+                      className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                       required
                     >
                       <option value="">-- Pilih Vendor --</option>
@@ -604,7 +565,7 @@ export default function UserManagement() {
                       <label className="block text-sm font-medium mb-2">
                         Vendor dapat bekerja di Section: *
                       </label>
-                      <div className="space-y-2">
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
                         {sections.map(s => (
                           <label key={s.id} className="flex items-center gap-2 cursor-pointer p-2 hover:bg-white rounded">
                             <input
@@ -626,7 +587,6 @@ export default function UserManagement() {
                 </div>
               )}
 
-              {/* Status */}
               <div>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -641,19 +601,18 @@ export default function UserManagement() {
               </div>
             </div>
 
-            {/* Footer */}
             <div className="sticky bottom-0 bg-gray-50 px-6 py-4 flex gap-3 border-t">
               <button
                 onClick={handleSave}
                 disabled={loading}
-                className="flex-1 bg-gradient-to-r from-blue-600 to-green-600 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-green-700 disabled:opacity-50"
+                className="flex-1 bg-gradient-to-r from-blue-600 to-green-600 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-green-700 disabled:opacity-50 transition-all"
               >
                 {loading ? '⏳ Menyimpan...' : '💾 Simpan'}
               </button>
               <button
                 onClick={() => setShowModal(false)}
                 disabled={loading}
-                className="px-6 bg-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-400"
+                className="px-6 bg-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-400 transition-all"
               >
                 Batal
               </button>
@@ -665,7 +624,6 @@ export default function UserManagement() {
   );
 }
 
-// Helper component to show vendor sections
 function VendorSections({ vendorId }) {
   const [sections, setSections] = useState([]);
 
