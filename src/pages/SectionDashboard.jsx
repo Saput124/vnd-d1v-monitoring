@@ -1,16 +1,19 @@
+// src/pages/SectionDashboard.jsx - UPDATED
+
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSupabaseData } from '../hooks/useSupabaseData';
+import Dashboard from '../components/Dashboard';
 import MasterData from '../components/MasterData';
 import BlockRegistration from '../components/BlockRegistration';
 import TransactionForm from '../components/TransactionForm';
+import TransactionHistory from '../components/TransactionHistory';
 
 export default function SectionDashboard() {
   const { user, logout, isSectionHead, isSupervisor } = useAuth();
   const data = useSupabaseData();
   const [activeTab, setActiveTab] = useState('dashboard');
 
-  // Determine role label
   const roleLabel = isSectionHead ? 'Kepala Seksi' : 'Supervisor';
 
   return (
@@ -21,7 +24,7 @@ export default function SectionDashboard() {
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-3xl font-bold">📊 VND D-One - Section Dashboard</h1>
-              <p className="text-purple-100 mt-1">Monitoring Aktivitas Section {user?.section_id}</p>
+              <p className="text-purple-100 mt-1">Monitoring Section {user?.section_name}</p>
             </div>
             <div className="text-right">
               <p className="text-sm text-purple-100">Selamat Datang,</p>
@@ -44,9 +47,10 @@ export default function SectionDashboard() {
           <div className="flex space-x-1 overflow-x-auto">
             {[
               { id: 'dashboard', label: '📊 Dashboard' },
-              { id: 'master', label: '💾 Master Data' },
-              { id: 'registration', label: '📋 Block Registration' },
+              { id: 'history', label: '📋 Transaksi History' },
               { id: 'transaction', label: '➕ Input Transaksi' },
+              { id: 'registration', label: '📝 Block Registration' },
+              { id: 'master', label: '💾 Master Data' },
             ].map(tab => (
               <button
                 key={tab.id}
@@ -66,58 +70,11 @@ export default function SectionDashboard() {
 
       {/* Content */}
       <div className="container mx-auto px-4 py-8">
-        {activeTab === 'dashboard' && (
-          <div className="bg-white rounded-lg shadow-md p-8">
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">
-              📍 Dashboard Section {user?.section_id}
-            </h2>
-            <p className="text-gray-600 mb-6">
-              Anda memiliki akses penuh untuk mengelola data di section Anda.
-            </p>
-            
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-blue-600 font-semibold">Vendors (Section)</p>
-                <p className="text-3xl font-bold text-gray-800">{data.vendors.length}</p>
-              </div>
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <p className="text-sm text-green-600 font-semibold">Blocks (Section)</p>
-                <p className="text-3xl font-bold text-gray-800">{data.blocks.length}</p>
-              </div>
-              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                <p className="text-sm text-purple-600 font-semibold">Workers (Section)</p>
-                <p className="text-3xl font-bold text-gray-800">{data.workers.length}</p>
-              </div>
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <p className="text-sm text-yellow-600 font-semibold">Activities (Section)</p>
-                <p className="text-3xl font-bold text-gray-800">{data.blockActivities.length}</p>
-              </div>
-            </div>
-
-            <div className="mt-8 p-4 bg-purple-50 border border-purple-200 rounded-lg">
-              <p className="text-purple-800 font-semibold mb-2">🔐 Access Level:</p>
-              <ul className="space-y-1 text-sm text-purple-700">
-                <li>✓ Role: {roleLabel}</li>
-                <li>✓ Section: {user?.section_id}</li>
-                <li>✓ Full CRUD access untuk section Anda</li>
-                <li>✓ Dashboard, Master Data, Block Registration, Transaksi</li>
-                <li>⚠️ Data section lain tidak dapat diakses</li>
-              </ul>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'master' && (
-          <MasterData data={data} loading={data.loading} />
-        )}
-
-        {activeTab === 'registration' && (
-          <BlockRegistration data={data} loading={data.loading} />
-        )}
-        
-        {activeTab === 'transaction' && (
-          <TransactionForm data={data} loading={data.loading} />
-        )}
+        {activeTab === 'dashboard' && <Dashboard data={data} loading={data.loading} />}
+        {activeTab === 'history' && <TransactionHistory data={data} loading={data.loading} />}
+        {activeTab === 'transaction' && <TransactionForm data={data} loading={data.loading} />}
+        {activeTab === 'registration' && <BlockRegistration data={data} loading={data.loading} />}
+        {activeTab === 'master' && <MasterData data={data} loading={data.loading} />}
       </div>
     </div>
   );
