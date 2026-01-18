@@ -1,4 +1,6 @@
-import { useState, useMemo } from 'react';
+// src/components/TransactionForm.jsx - FIXED VERSION
+
+import { useState, useMemo, useEffect } from 'react';
   
 export default function TransactionForm({ data, loading }) {
   const [formData, setFormData] = useState({
@@ -7,14 +9,14 @@ export default function TransactionForm({ data, loading }) {
     activity_type_id: '',
     execution_number: 1,
     kondisi: '',
-    selectedBlocks: [], // [{id, luasan}]
-    workerMode: 'manual', // 'manual' or 'list'
+    selectedBlocks: [],
+    workerMode: 'manual',
     jumlahPekerja: '',
     selectedWorkers: [],
     estimasi_ton: '',
     actual_ton: '',
     varietas_override: '',
-    materials: [], // [{name, dosis}] for weed control
+    materials: [],
     catatan: ''
   });
 
@@ -24,12 +26,22 @@ export default function TransactionForm({ data, loading }) {
     search: ''
   });
 
+  // 🆕 AUTO-FILL vendor_id jika user role = vendor
+  useEffect(() => {
+    if (data.currentUser?.role === 'vendor' && data.currentUser?.vendor_id) {
+      setFormData(prev => ({
+        ...prev,
+        vendor_id: data.currentUser.vendor_id
+      }));
+    }
+  }, [data.currentUser]);
+
   // Get selected activity
   const selectedActivity = useMemo(() => {
     return data.activityTypes.find(a => a.id === formData.activity_type_id);
   }, [formData.activity_type_id, data.activityTypes]);
 
-  // Get available blocks for selected activity
+  // 🔧 FILTER: Only show blocks for current section (if not admin)
   const availableBlocks = useMemo(() => {
     if (!formData.activity_type_id) return [];
 
@@ -39,7 +51,18 @@ export default function TransactionForm({ data, loading }) {
       ba.status !== 'cancelled'
     );
 
-    // Apply filters
+    // 🔒 DATA ISOLATION: Filter by section for non-admin
+    if (data.currentUser?.role !== 'admin' && data.currentUser?.section_id) {
+      filtered = filtered.filter(ba => ba.section_id === data.currentUser.section_id);
+    }
+
+    // 🔒 VENDOR ISOLATION: Vendor hanya bisa lihat blok di section mereka
+    if (data.currentUser?.role === 'vendor' && data.currentUser?.vendor_sections?.length > 0) {
+      const vendorSectionIds = data.currentUser.vendor_sections.map(s => s.id);
+      filtered = filtered.filter(ba => vendorSectionIds.includes(ba.section_id));
+    }
+
+    // Apply UI filters
     if (blockFilters.zone) {
       filtered = filtered.filter(ba => {
         const block = data.blocks.find(b => b.id === ba.block_id);
@@ -70,17 +93,25 @@ export default function TransactionForm({ data, loading }) {
         block_luas_total: block?.luas_total
       };
     });
-  }, [formData.activity_type_id, formData.execution_number, data.blockActivities, data.blocks, blockFilters]);
+  }, [formData.activity_type_id, data.blockActivities, data.blocks, blockFilters, data.currentUser]);
 
-  // Get available workers for selected vendor
+  // 🔧 FILTER: Workers by vendor + section access
   const availableWorkers = useMemo(() => {
     if (!formData.vendor_id) return [];
-    return data.workers.filter(w => w.vendor_id === formData.vendor_id);
-  }, [formData.vendor_id, data.workers]);
+    
+    let workers = data.workers.filter(w => w.vendor_id === formData.vendor_id);
+    
+    // 🔒 Vendor hanya lihat workers mereka sendiri
+    if (data.currentUser?.role === 'vendor' && data.currentUser?.vendor_id) {
+      workers = workers.filter(w => w.vendor_id === data.currentUser.vendor_id);
+    }
+    
+    return workers;
+  }, [formData.vendor_id, data.workers, data.currentUser]);
 
-  // Unique zones & categories
-  const uniqueZones = [...new Set(data.blocks.map(b => b.zone))];
-  const uniqueKategori = [...new Set(data.blocks.map(b => b.kategori).filter(Boolean))];
+  // Unique zones & categories (filtered by access)
+  const uniqueZones = [...new Set(availableBlocks.map(b => b.block_zone).filter(Boolean))];
+  const uniqueKategori = [...new Set(availableBlocks.map(b => b.kategori).filter(Boolean))];
 
   // Toggle block selection
   const toggleBlock = (blockActivityId) => {
@@ -312,7 +343,7 @@ export default function TransactionForm({ data, loading }) {
       // Reset form
       setFormData({
         tanggal: new Date().toISOString().split('T')[0],
-        vendor_id: '',
+        vendor_id: data.currentUser?.role === 'vendor' ? data.currentUser.vendor_id : '',
         activity_type_id: '',
         execution_number: 1,
         kondisi: '',
@@ -366,36 +397,36 @@ export default function TransactionForm({ data, loading }) {
             </div>
 
             <div>
-  <label className="block text-sm font-medium mb-2">Vendor *</label>
-  {data.currentUser?.role === 'vendor' ? (
-    // Vendor role: auto-fill, tidak bisa pilih vendor lain
-    <input
-      type="text"
-      value={data.vendors.find(v => v.id === data.currentUser?.vendor_id)?.name || 'Loading...'}
-      className="w-full px-4 py-2 border rounded-lg bg-gray-100"
-      disabled
-    />
-  ) : (
-    // Admin/Supervisor: bisa pilih vendor
-    <select
-      value={formData.vendor_id}
-      onChange={(e) => setFormData({
-        ...formData, 
-        vendor_id: e.target.value,
-        selectedWorkers: [],
-        workerMode: 'manual',
-        jumlahPekerja: ''
-      })}
-      className="w-full px-4 py-2 border rounded-lg"
-      required
-    >
-      <option value="">-- Pilih Vendor --</option>
-      {data.vendors.map(v => (
-        <option key={v.id} value={v.id}>{v.name}</option>
-      ))}
-    </select>
-  )}
-</div>
+              <label className="block text-sm font-medium mb-2">Vendor *</label>
+              {data.currentUser?.role === 'vendor' ? (
+                // 🔒 Vendor role: auto-fill, tidak bisa pilih vendor lain
+                <input
+                  type="text"
+                  value={data.currentUser?.vendor_name || 'Loading...'}
+                  className="w-full px-4 py-2 border rounded-lg bg-gray-100"
+                  disabled
+                />
+              ) : (
+                // Admin/Supervisor: bisa pilih vendor
+                <select
+                  value={formData.vendor_id}
+                  onChange={(e) => setFormData({
+                    ...formData, 
+                    vendor_id: e.target.value,
+                    selectedWorkers: [],
+                    workerMode: 'manual',
+                    jumlahPekerja: ''
+                  })}
+                  className="w-full px-4 py-2 border rounded-lg"
+                  required
+                >
+                  <option value="">-- Pilih Vendor --</option>
+                  {data.vendors.map(v => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+              )}
+            </div>
 
             <div>
               <label className="block text-sm font-medium mb-2">Aktivitas *</label>
@@ -510,7 +541,12 @@ export default function TransactionForm({ data, loading }) {
                   <p className="text-yellow-800">
                     Tidak ada blok tersedia untuk aktivitas ini.
                     <br/>
-                    <span className="text-sm">Registrasi blok terlebih dahulu di tab "Block Registration"</span>
+                    <span className="text-sm">
+                      {data.currentUser?.role === 'vendor' 
+                        ? 'Hubungi admin untuk registrasi blok di section Anda.'
+                        : 'Registrasi blok terlebih dahulu di tab "Block Registration"'
+                      }
+                    </span>
                   </p>
                 </div>
               ) : (
@@ -694,7 +730,7 @@ export default function TransactionForm({ data, loading }) {
                         <label className="block text-xs font-medium mb-1">Total Kebutuhan</label>
                         <input
                           type="text"
-                          value={`${(parseFloat(mat.dosis) || 0) * totalLuasan} L`}
+                          value={`${((parseFloat(mat.dosis) || 0) * totalLuasan).toFixed(2)} L`}
                           className="w-full px-3 py-2 bg-gray-100 border rounded text-sm font-semibold text-blue-600"
                           disabled
                         />
