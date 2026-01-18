@@ -1,14 +1,4 @@
 import { useState, useMemo } from 'react';
-
-useEffect(() => {
-    // Auto-fill vendor_id untuk vendor login
-    if (data.currentUser?.role === 'vendor' && data.currentUser?.vendor_id) {
-      setFormData(prev => ({
-        ...prev,
-        vendor_id: data.currentUser.vendor_id
-      }));
-    }
-  }, [data.currentUser]);
   
 export default function TransactionForm({ data, loading }) {
   const [formData, setFormData] = useState({
