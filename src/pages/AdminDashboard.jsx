@@ -1,9 +1,13 @@
+// src/pages/AdminDashboard.jsx - UPDATED WITH DASHBOARD & HISTORY
+
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSupabaseData } from '../hooks/useSupabaseData';
+import Dashboard from '../components/Dashboard';
 import MasterData from '../components/MasterData';
 import BlockRegistration from '../components/BlockRegistration';
 import TransactionForm from '../components/TransactionForm';
+import TransactionHistory from '../components/TransactionHistory';
 import UserManagement from '../components/UserManagement';
 
 export default function AdminDashboard() {
@@ -41,11 +45,12 @@ export default function AdminDashboard() {
         <div className="container mx-auto px-4">
           <div className="flex space-x-1 overflow-x-auto">
             {[
-              { id: 'dashboard', label: '📊 Dashboard' },
-              { id: 'users', label: '👥 User Management' },
-              { id: 'master', label: '💾 Master Data' },
-              { id: 'registration', label: '📋 Block Registration' },
-              { id: 'transaction', label: '➕ Input Transaksi' },
+              { id: 'dashboard', label: '📊 Dashboard', icon: '📊' },
+              { id: 'history', label: '📋 Transaksi History', icon: '📋' },
+              { id: 'transaction', label: '➕ Input Transaksi', icon: '➕' },
+              { id: 'registration', label: '📝 Block Registration', icon: '📝' },
+              { id: 'master', label: '💾 Master Data', icon: '💾' },
+              { id: 'users', label: '👥 User Management', icon: '👥' },
             ].map(tab => (
               <button
                 key={tab.id}
@@ -56,6 +61,7 @@ export default function AdminDashboard() {
                     : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'
                 }`}
               >
+                <span className="text-xl">{tab.icon}</span>
                 {tab.label}
               </button>
             ))}
@@ -65,74 +71,12 @@ export default function AdminDashboard() {
 
       {/* Content */}
       <div className="container mx-auto px-4 py-8">
-        {activeTab === 'dashboard' && (
-          <div className="bg-white rounded-lg shadow-md p-8">
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">
-              🎉 Sistem Berhasil Deploy!
-            </h2>
-            <p className="text-gray-600 mb-6">
-              VND D-One Monitoring System berhasil terkoneksi dengan Supabase dan deploy di Vercel.
-            </p>
-            
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-blue-600 font-semibold">Vendors</p>
-                <p className="text-3xl font-bold text-gray-800">{data.vendors.length}</p>
-              </div>
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <p className="text-sm text-green-600 font-semibold">Blocks (Master)</p>
-                <p className="text-3xl font-bold text-gray-800">{data.blocks.length}</p>
-              </div>
-              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                <p className="text-sm text-purple-600 font-semibold">Workers</p>
-                <p className="text-3xl font-bold text-gray-800">{data.workers.length}</p>
-              </div>
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <p className="text-sm text-yellow-600 font-semibold">Registered Activities</p>
-                <p className="text-3xl font-bold text-gray-800">{data.blockActivities.length}</p>
-              </div>
-            </div>
-
-            <div className="mt-8 p-4 bg-green-50 border border-green-200 rounded-lg">
-              <p className="text-green-800 font-semibold mb-2">✅ System Status:</p>
-              <ul className="space-y-1 text-sm text-green-700">
-                <li>✓ Deployed on Vercel</li>
-                <li>✓ Supabase Connection: Active</li>
-                <li>✓ Authentication: Working</li>
-                <li>✓ Database: 17 Tables Ready</li>
-                <li>✓ Master Data: Vendors, Blocks, Workers</li>
-                <li>✓ Block Registration: Ready</li>
-              </ul>
-            </div>
-
-            <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-              <p className="text-yellow-800 font-semibold mb-2">🚧 Next Development:</p>
-              <ul className="space-y-1 text-sm text-yellow-700">
-                <li>→ Transaction Input Forms (5 Aktivitas)</li>
-                <li>→ Dashboard dengan Charts & Analytics</li>
-                <li>→ Workload Analysis (Luasan vs Pekerja)</li>
-                <li>→ Export Excel & PDF</li>
-                <li>→ Email Notifications</li>
-              </ul>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'users' && (
-          <UserManagement />
-        )}
-
-        {activeTab === 'master' && (
-          <MasterData data={data} loading={data.loading} />
-        )}
-
-        {activeTab === 'registration' && (
-          <BlockRegistration data={data} loading={data.loading} />
-        )}
-        
-        {activeTab === 'transaction' && (
-          <TransactionForm data={data} loading={data.loading} />
-        )}
+        {activeTab === 'dashboard' && <Dashboard data={data} loading={data.loading} />}
+        {activeTab === 'history' && <TransactionHistory data={data} loading={data.loading} />}
+        {activeTab === 'transaction' && <TransactionForm data={data} loading={data.loading} />}
+        {activeTab === 'registration' && <BlockRegistration data={data} loading={data.loading} />}
+        {activeTab === 'master' && <MasterData data={data} loading={data.loading} />}
+        {activeTab === 'users' && <UserManagement />}
       </div>
     </div>
   );
