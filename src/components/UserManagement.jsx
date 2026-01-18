@@ -1,6 +1,32 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase';
 
+// Helper component to show vendor sections
+function VendorSections({ vendorId }) {
+  const [sections, setSections] = useState([]);
+
+  useEffect(() => {
+    const fetchSections = async () => {
+      const { data } = await supabase
+        .from('vendor_sections')
+        .select('sections(code, name)')
+        .eq('vendor_id', vendorId);
+      
+      setSections(data?.map(d => d.sections) || []);
+    };
+
+    fetchSections();
+  }, [vendorId]);
+
+  if (sections.length === 0) return <span className="text-xs text-gray-500">No sections</span>;
+
+  return (
+    <div className="text-xs text-gray-600 mt-1">
+      Sections: {sections.map(s => s.name).join(', ')}
+    </div>
+  );
+}
+
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
   const [vendors, setVendors] = useState([]);
@@ -620,31 +646,6 @@ export default function UserManagement() {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function VendorSections({ vendorId }) {
-  const [sections, setSections] = useState([]);
-
-  useEffect(() => {
-    const fetchSections = async () => {
-      const { data } = await supabase
-        .from('vendor_sections')
-        .select('sections(code, name)')
-        .eq('vendor_id', vendorId);
-      
-      setSections(data?.map(d => d.sections) || []);
-    };
-
-    fetchSections();
-  }, [vendorId]);
-
-  if (sections.length === 0) return <span className="text-xs text-gray-500">No sections</span>;
-
-  return (
-    <div className="text-xs text-gray-600 mt-1">
-      Sections: {sections.map(s => s.name).join(', ')}
     </div>
   );
 }
