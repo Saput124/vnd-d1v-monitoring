@@ -1,3 +1,5 @@
+//src/hooks/useSupabaseData.js - FIXED VERSION
+
 import { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase';
 import { getCurrentUser } from '../utils/supabase';
@@ -10,39 +12,140 @@ export function useSupabaseData() {
   const [activityTypes, setActivityTypes] = useState([]);
   const [blockActivities, setBlockActivities] = useState([]);
   const [transactions, setTransactions] = useState([]);
-  
+
   const currentUser = getCurrentUser();
 
   const fetchAllData = async () => {
     setLoading(true);
     try {
-      // Determine filter based on role
       const isAdmin = currentUser?.role === 'admin';
+      const isSectionStaff = ['section_head', 'supervisor'].includes(currentUser?.role);
+      const isVendor = currentUser?.role === 'vendor';
 
-      // Fetch based on role
+      // ============================================================================
+      // 1️⃣ VENDORS - Filter berdasarkan vendor_sections
+      // ============================================================================
       let vendorsQuery = supabase.from('vendors').select('*').order('name');
-      let blocksQuery = supabase.from('blocks').select('*').order('zone, name');
-      let workersQuery = supabase.from('workers').select('*, vendors(name)').order('name');
-      let blockActivitiesQuery = supabase.from('block_activities').select('*').order('target_bulan, created_at');
-      let transactionsQuery = supabase.from('transactions').select(`
-        *,
-        vendors(name),
-        activity_types(name, code)
-      `).order('tanggal', { ascending: false });
 
-      // Apply section filter for non-admin
-      if (!isAdmin && currentUser?.section_id) {
-        vendorsQuery = vendorsQuery.eq('section_id', currentUser.section_id);
+      if (isSectionStaff && currentUser?.section_id) {
+        // Section staff: hanya vendor yang melayani section mereka
+        const { data: vendorSections } = await supabase
+          .from('vendor_sections')
+          .select('vendor_id')
+          .eq('section_id', currentUser.section_id);
+        
+        const vendorIds = vendorSections?.map(vs => vs.vendor_id) || [];
+        
+        if (vendorIds.length > 0) {
+          vendorsQuery = vendorsQuery.in('id', vendorIds);
+        } else {
+          // Jika section belum assign vendor, return empty
+          vendorsQuery = vendorsQuery.eq('id', '00000000-0000-0000-0000-000000000000'); // UUID yang pasti tidak ada
+        }
+      }
+
+      if (isVendor && currentUser?.vendor_id) {
+        // Vendor: hanya lihat vendor mereka sendiri
+        vendorsQuery = vendorsQuery.eq('id', currentUser.vendor_id);
+      }
+
+      // ============================================================================
+      // 2️⃣ BLOCKS - Filter by section_id
+      // ============================================================================
+      let blocksQuery = supabase.from('blocks').select('*').order('zone, name');
+
+      if (isSectionStaff && currentUser?.section_id) {
         blocksQuery = blocksQuery.eq('section_id', currentUser.section_id);
+      }
+
+      if (isVendor && currentUser?.vendor_sections?.length > 0) {
+        // Vendor: hanya blok di section yang mereka layani
+        const vendorSectionIds = currentUser.vendor_sections.map(s => s.id);
+        blocksQuery = blocksQuery.in('section_id', vendorSectionIds);
+      }
+
+      // ============================================================================
+      // 3️⃣ WORKERS - Filter by vendor (via vendor_sections untuk section staff)
+      // ============================================================================
+      let workersQuery = supabase.from('workers').select('*, vendors(name)').order('name');
+
+      if (isSectionStaff && currentUser?.section_id) {
+        // Section staff: workers dari vendor yang melayani section mereka
+        const { data: vendorSections } = await supabase
+          .from('vendor_sections')
+          .select('vendor_id')
+          .eq('section_id', currentUser.section_id);
+        
+        const vendorIds = vendorSections?.map(vs => vs.vendor_id) || [];
+        
+        if (vendorIds.length > 0) {
+          workersQuery = workersQuery.in('vendor_id', vendorIds);
+        } else {
+          workersQuery = workersQuery.eq('vendor_id', '00000000-0000-0000-0000-000000000000');
+        }
+      }
+
+      if (isVendor && currentUser?.vendor_id) {
+        workersQuery = workersQuery.eq('vendor_id', currentUser.vendor_id);
+      }
+
+      // ============================================================================
+      // 4️⃣ BLOCK_ACTIVITIES - Filter by section_id
+      // ============================================================================
+      let blockActivitiesQuery = supabase
+        .from('block_activities')
+        .select('*')
+        .order('target_bulan, created_at');
+
+      if (isSectionStaff && currentUser?.section_id) {
         blockActivitiesQuery = blockActivitiesQuery.eq('section_id', currentUser.section_id);
       }
 
-      // Apply vendor filter for vendor role
-      if (currentUser?.role === 'vendor' && currentUser?.vendor_id) {
-        workersQuery = workersQuery.eq('vendor_id', currentUser.vendor_id);
+      if (isVendor && currentUser?.vendor_sections?.length > 0) {
+        const vendorSectionIds = currentUser.vendor_sections.map(s => s.id);
+        blockActivitiesQuery = blockActivitiesQuery.in('section_id', vendorSectionIds);
+      }
+
+      // ============================================================================
+      // 5️⃣ TRANSACTIONS - Filter by vendor (via vendor_sections untuk section staff)
+      // ============================================================================
+      let transactionsQuery = supabase
+        .from('transactions')
+        .select(`
+          *,
+          vendors(name),
+          activity_types(name, code)
+        `)
+        .order('tanggal', { ascending: false });
+
+      if (isSectionStaff && currentUser?.section_id) {
+        // Section staff: transactions dari vendor yang melayani section mereka
+        const { data: vendorSections } = await supabase
+          .from('vendor_sections')
+          .select('vendor_id')
+          .eq('section_id', currentUser.section_id);
+        
+        const vendorIds = vendorSections?.map(vs => vs.vendor_id) || [];
+        
+        if (vendorIds.length > 0) {
+          transactionsQuery = transactionsQuery.in('vendor_id', vendorIds);
+        } else {
+          transactionsQuery = transactionsQuery.eq('vendor_id', '00000000-0000-0000-0000-000000000000');
+        }
+      }
+
+      if (isVendor && currentUser?.vendor_id) {
         transactionsQuery = transactionsQuery.eq('vendor_id', currentUser.vendor_id);
       }
 
+      // ============================================================================
+      // 6️⃣ ACTIVITY_TYPES - No filter (available to all)
+      // ============================================================================
+      const activityTypesQuery = supabase.from('activity_types').select('*').order('name');
+
+      // ============================================================================
+      // Execute all queries
+      // ============================================================================
       const [
         vendorsRes, 
         blocksRes, 
@@ -54,7 +157,7 @@ export function useSupabaseData() {
         vendorsQuery,
         blocksQuery,
         workersQuery,
-        supabase.from('activity_types').select('*').order('name'),
+        activityTypesQuery,
         blockActivitiesQuery,
         transactionsQuery
       ]);
@@ -72,8 +175,18 @@ export function useSupabaseData() {
       setActivityTypes(activityRes.data || []);
       setBlockActivities(blockActivitiesRes.data || []);
       setTransactions(transactionsRes.data || []);
+      
+      console.log('✅ Data loaded:', {
+        vendors: vendorsRes.data?.length,
+        blocks: blocksRes.data?.length,
+        workers: workersRes.data?.length,
+        blockActivities: blockActivitiesRes.data?.length,
+        transactions: transactionsRes.data?.length,
+        role: currentUser?.role,
+        section: currentUser?.section_id
+      });
     } catch (err) {
-      console.error('Error fetching data:', err);
+      console.error('❌ Error fetching data:', err);
       alert('Error loading data: ' + err.message);
     } finally {
       setLoading(false);
@@ -84,12 +197,12 @@ export function useSupabaseData() {
     fetchAllData();
   }, []);
 
+  // ============================================================================
   // VENDOR FUNCTIONS
+  // ============================================================================
   const addVendor = async (data) => {
-    // Auto-assign section for non-admin
-    if (currentUser?.role !== 'admin' && currentUser?.section_id) {
-      data.section_id = currentUser.section_id;
-    }
+    // Vendors tidak punya section_id langsung
+    // Assignment ke section dilakukan via vendor_sections (di UserManagement)
     const { error } = await supabase.from('vendors').insert([data]);
     if (error) throw error;
     await fetchAllData();
@@ -107,9 +220,11 @@ export function useSupabaseData() {
     await fetchAllData();
   };
 
+  // ============================================================================
   // BLOCK FUNCTIONS
+  // ============================================================================
   const addBlock = async (data) => {
-    // Auto-assign section for non-admin
+    // Auto-assign section untuk non-admin
     if (currentUser?.role !== 'admin' && currentUser?.section_id) {
       data.section_id = currentUser.section_id;
     }
@@ -130,7 +245,9 @@ export function useSupabaseData() {
     await fetchAllData();
   };
 
+  // ============================================================================
   // WORKER FUNCTIONS
+  // ============================================================================
   const addWorker = async (data) => {
     const { error } = await supabase.from('workers').insert([data]);
     if (error) throw error;
@@ -149,12 +266,23 @@ export function useSupabaseData() {
     await fetchAllData();
   };
 
+  // ============================================================================
   // BLOCK ACTIVITY FUNCTIONS
+  // ============================================================================
   const addBlockActivity = async (data) => {
-    // Auto-assign section for non-admin
-    if (currentUser?.role !== 'admin' && currentUser?.section_id) {
+    // Auto-assign section dari block yang dipilih
+    if (data.block_id) {
+      const block = blocks.find(b => b.id === data.block_id);
+      if (block?.section_id) {
+        data.section_id = block.section_id;
+      }
+    }
+    
+    // Fallback: gunakan section user jika tidak ada dari block
+    if (!data.section_id && currentUser?.role !== 'admin' && currentUser?.section_id) {
       data.section_id = currentUser.section_id;
     }
+    
     const { error } = await supabase.from('block_activities').insert([data]);
     if (error) throw error;
     await fetchAllData();
