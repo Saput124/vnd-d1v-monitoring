@@ -50,19 +50,20 @@ export function useSupabaseData() {
       }
 
       // ============================================================================
-      // 2️⃣ BLOCKS - Filter by section_id
+      // 2️⃣ BLOCKS - Master blocks (Pool Divisi)
       // ============================================================================
       let blocksQuery = supabase.from('blocks').select('*').order('zone, name');
 
-      if (isSectionStaff && currentUser?.section_id) {
-        blocksQuery = blocksQuery.eq('section_id', currentUser.section_id);
+      // Admin & Section staff: SEMUA blocks (pool divisi)
+      // Vendor: TIDAK perlu akses master blocks langsung
+      // (Vendor akses blocks via block_activities saat input transaksi)
+      
+      if (isVendor) {
+        // Vendor tidak perlu akses master blocks di Master Data tab
+        // Mereka cuma butuh blocks via block_activities
+        blocksQuery = blocksQuery.limit(0); // Return empty untuk vendor
       }
-
-      if (isVendor && currentUser?.vendor_sections?.length > 0) {
-        // Vendor: hanya blok di section yang mereka layani
-        const vendorSectionIds = currentUser.vendor_sections.map(s => s.id);
-        blocksQuery = blocksQuery.in('section_id', vendorSectionIds);
-      }
+      // Admin & Section staff: no filter (all master blocks)
 
       // ============================================================================
       // 3️⃣ WORKERS - Filter by vendor (via vendor_sections untuk section staff)
@@ -224,10 +225,8 @@ export function useSupabaseData() {
   // BLOCK FUNCTIONS
   // ============================================================================
   const addBlock = async (data) => {
-    // Auto-assign section untuk non-admin
-    if (currentUser?.role !== 'admin' && currentUser?.section_id) {
-      data.section_id = currentUser.section_id;
-    }
+    // Master blocks tidak punya section_id
+    // Section "claim" blocks via block_activities
     const { error } = await supabase.from('blocks').insert([data]);
     if (error) throw error;
     await fetchAllData();
@@ -270,15 +269,10 @@ export function useSupabaseData() {
   // BLOCK ACTIVITY FUNCTIONS
   // ============================================================================
   const addBlockActivity = async (data) => {
-    // Auto-assign section dari block yang dipilih
-    if (data.block_id) {
-      const block = blocks.find(b => b.id === data.block_id);
-      if (block?.section_id) {
-        data.section_id = block.section_id;
-      }
-    }
+    // Section assignment happens HERE (block_activities table)
+    // block_activities.section_id = which section "claims" this block for this activity
     
-    // Fallback: gunakan section user jika tidak ada dari block
+    // Auto-assign section dari user
     if (!data.section_id && currentUser?.role !== 'admin' && currentUser?.section_id) {
       data.section_id = currentUser.section_id;
     }
