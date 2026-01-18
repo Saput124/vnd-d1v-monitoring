@@ -34,6 +34,24 @@ export default function UserManagement() {
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [editMode, setEditMode] = useState(false);
+  const [showPassword, setShowPassword] = useState(true);
+  
+  // Modal tambahan
+  const [showSectionModal, setShowSectionModal] = useState(false);
+  const [showVendorModal, setShowVendorModal] = useState(false);
+  
+  // Form data section baru
+  const [newSection, setNewSection] = useState({ code: '', name: '' });
+  
+  // Form data vendor baru
+  const [newVendor, setNewVendor] = useState({ 
+    code: '', 
+    name: '', 
+    contact_person: '',
+    phone: '',
+    email: ''
+  });
+
   const [formData, setFormData] = useState({
     id: null,
     username: '',
@@ -133,7 +151,7 @@ export default function UserManagement() {
     setFormData({
       id: user.id,
       username: user.username,
-      password_hash: '',
+      password_hash: user.password_hash,
       full_name: user.full_name,
       email: user.email || '',
       phone: user.phone || '',
@@ -154,8 +172,8 @@ export default function UserManagement() {
         return;
       }
 
-      if (!editMode && !formData.password_hash) {
-        alert('❌ Password harus diisi untuk user baru!');
+      if (!formData.password_hash) {
+        alert('❌ Password harus diisi!');
         return;
       }
 
@@ -178,6 +196,7 @@ export default function UserManagement() {
 
       if (editMode) {
         const updateData = {
+          password_hash: formData.password_hash,
           full_name: formData.full_name,
           email: formData.email,
           phone: formData.phone,
@@ -185,10 +204,6 @@ export default function UserManagement() {
           section_id: ['section_head', 'supervisor'].includes(formData.role) ? formData.section_id : null,
           active: formData.active
         };
-
-        if (formData.password_hash) {
-          updateData.password_hash = formData.password_hash;
-        }
 
         const { error: updateError } = await supabase
           .from('users')
@@ -293,6 +308,70 @@ export default function UserManagement() {
     }));
   };
 
+  // Tambah Section Baru
+  const handleAddSection = async () => {
+    if (!newSection.code || !newSection.name) {
+      alert('❌ Kode dan Nama Section harus diisi!');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('sections')
+        .insert([{ code: newSection.code, name: newSection.name }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      alert('✅ Section berhasil ditambahkan!');
+      setNewSection({ code: '', name: '' });
+      setShowSectionModal(false);
+      await fetchData();
+    } catch (err) {
+      console.error('Error adding section:', err);
+      alert('❌ Error: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Tambah Vendor Baru
+  const handleAddVendor = async () => {
+    if (!newVendor.code || !newVendor.name) {
+      alert('❌ Kode dan Nama Vendor harus diisi!');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('vendors')
+        .insert([{
+          code: newVendor.code,
+          name: newVendor.name,
+          contact_person: newVendor.contact_person,
+          phone: newVendor.phone,
+          email: newVendor.email
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      alert('✅ Vendor berhasil ditambahkan!');
+      setNewVendor({ code: '', name: '', contact_person: '', phone: '', email: '' });
+      setShowVendorModal(false);
+      await fetchData();
+    } catch (err) {
+      console.error('Error adding vendor:', err);
+      alert('❌ Error: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const getRoleBadge = (role) => {
     const badges = {
       admin: 'bg-red-100 text-red-800',
@@ -326,7 +405,7 @@ export default function UserManagement() {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">👥 User Management</h2>
-          <p className="text-gray-600 mt-1">Kelola user, role, dan hak akses sistem</p>
+          <p className="text-gray-600 mt-1">Kelola user, role, hak akses, sections & vendors</p>
         </div>
         <button
           onClick={handleNew}
@@ -369,6 +448,7 @@ export default function UserManagement() {
             <thead className="bg-gradient-to-r from-blue-600 to-green-600 text-white">
               <tr>
                 <th className="px-6 py-4 text-left font-semibold">Username</th>
+                <th className="px-6 py-4 text-left font-semibold">Password</th>
                 <th className="px-6 py-4 text-left font-semibold">Full Name</th>
                 <th className="px-6 py-4 text-left font-semibold">Role</th>
                 <th className="px-6 py-4 text-left font-semibold">Assignment</th>
@@ -382,7 +462,11 @@ export default function UserManagement() {
                 <tr key={user.id} className={`border-t hover:bg-gray-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                   <td className="px-6 py-4">
                     <div className="font-mono text-sm font-semibold">{user.username}</div>
-                    <div className="text-xs text-gray-500">ID: {user.id.substring(0, 8)}...</div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="font-mono text-sm text-blue-600 font-semibold">
+                      {showPassword ? user.password_hash : '••••••••'}
+                    </div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="font-medium">{user.full_name}</div>
@@ -442,7 +526,7 @@ export default function UserManagement() {
                         className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-sm"
                         disabled={user.role === 'admin' && users.filter(u => u.role === 'admin').length === 1}
                       >
-                        🗑️ Delete
+                        🗑️
                       </button>
                     </div>
                   </td>
@@ -452,6 +536,18 @@ export default function UserManagement() {
           </table>
         </div>
 
+        <div className="p-4 bg-gray-50 border-t flex justify-between items-center">
+          <button
+            onClick={() => setShowPassword(!showPassword)}
+            className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 text-sm font-semibold"
+          >
+            {showPassword ? '🙈 Sembunyikan Password' : '👁️ Tampilkan Password'}
+          </button>
+          <div className="text-sm text-gray-600">
+            Total Users: <span className="font-bold">{users.length}</span>
+          </div>
+        </div>
+
         {users.length === 0 && !loading && (
           <div className="text-center py-12 text-gray-500">
             Belum ada user. Klik "Tambah User Baru" untuk memulai.
@@ -459,6 +555,7 @@ export default function UserManagement() {
         )}
       </div>
 
+      {/* Modal User Form */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -483,15 +580,14 @@ export default function UserManagement() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Password {editMode && '(kosongkan jika tidak diubah)'}
-                  </label>
+                  <label className="block text-sm font-medium mb-2">Password *</label>
                   <input
                     type="text"
                     value={formData.password_hash}
                     onChange={(e) => setFormData({...formData, password_hash: e.target.value})}
                     className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder={editMode ? 'Biarkan kosong jika tidak diubah' : 'password123'}
+                    placeholder="password123"
+                    required
                   />
                 </div>
               </div>
@@ -553,8 +649,16 @@ export default function UserManagement() {
               </div>
 
               {(formData.role === 'section_head' || formData.role === 'supervisor') && (
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <label className="block text-sm font-medium mb-2">Assign to Section *</label>
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+                  <div className="flex justify-between items-center">
+                    <label className="block text-sm font-medium">Assign to Section *</label>
+                    <button
+                      onClick={() => setShowSectionModal(true)}
+                      className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+                    >
+                      ➕ Section Baru
+                    </button>
+                  </div>
                   <select
                     value={formData.section_id || ''}
                     onChange={(e) => setFormData({...formData, section_id: e.target.value || null})}
@@ -563,7 +667,7 @@ export default function UserManagement() {
                   >
                     <option value="">-- Pilih Section --</option>
                     {sections.map(s => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
+                      <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
                     ))}
                   </select>
                 </div>
@@ -572,7 +676,15 @@ export default function UserManagement() {
               {formData.role === 'vendor' && (
                 <div className="space-y-4 p-4 bg-green-50 border border-green-200 rounded-lg">
                   <div>
-                    <label className="block text-sm font-medium mb-2">Assign to Vendor *</label>
+                    <div className="flex justify-between items-center mb-2">
+                      <label className="block text-sm font-medium">Assign to Vendor *</label>
+                      <button
+                        onClick={() => setShowVendorModal(true)}
+                        className="text-xs bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
+                      >
+                        ➕ Vendor Baru
+                      </button>
+                    </div>
                     <select
                       value={formData.vendor_id || ''}
                       onChange={(e) => setFormData({...formData, vendor_id: e.target.value || null})}
@@ -639,6 +751,155 @@ export default function UserManagement() {
                 onClick={() => setShowModal(false)}
                 disabled={loading}
                 className="px-6 bg-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-400 transition-all"
+              >
+                Batal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Tambah Section */}
+      {showSectionModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4 rounded-t-lg">
+              <h3 className="text-lg font-bold">➕ Tambah Section Baru</h3>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Kode Section *</label>
+                <input
+                  type="text"
+                  value={newSection.code}
+                  onChange={(e) => setNewSection({...newSection, code: e.target.value})}
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., D1, D2, D3"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Nama Section *</label>
+                <input
+                  type="text"
+                  value={newSection.name}
+                  onChange={(e) => setNewSection({...newSection, name: e.target.value})}
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., Divisi 1"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="bg-gray-50 px-6 py-4 flex gap-3 border-t rounded-b-lg">
+              <button
+                onClick={handleAddSection}
+                disabled={loading}
+                className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50"
+              >
+                {loading ? '⏳ Menyimpan...' : '💾 Simpan Section'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowSectionModal(false);
+                  setNewSection({ code: '', name: '' });
+                }}
+                disabled={loading}
+                className="px-6 bg-gray-300 text-gray-700 py-2 rounded-lg font-semibold hover:bg-gray-400"
+              >
+                Batal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Tambah Vendor */}
+      {showVendorModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white px-6 py-4 rounded-t-lg">
+              <h3 className="text-lg font-bold">➕ Tambah Vendor Baru</h3>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Kode Vendor *</label>
+                  <input
+                    type="text"
+                    value={newVendor.code}
+                    onChange={(e) => setNewVendor({...newVendor, code: e.target.value})}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500"
+                    placeholder="V001"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Nama Vendor *</label>
+                  <input
+                    type="text"
+                    value={newVendor.name}
+                    onChange={(e) => setNewVendor({...newVendor, name: e.target.value})}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500"
+                    placeholder="PT Vendor"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Contact Person</label>
+                <input
+                  type="text"
+                  value={newVendor.contact_person}
+                  onChange={(e) => setNewVendor({...newVendor, contact_person: e.target.value})}
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500"
+                  placeholder="Nama PIC"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Phone</label>
+                  <input
+                    type="text"
+                    value={newVendor.phone}
+                    onChange={(e) => setNewVendor({...newVendor, phone: e.target.value})}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500"
+                    placeholder="08123456789"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Email</label>
+                  <input
+                    type="email"
+                    value={newVendor.email}
+                    onChange={(e) => setNewVendor({...newVendor, email: e.target.value})}
+                    className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500"
+                    placeholder="vendor@mail.com"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 px-6 py-4 flex gap-3 border-t rounded-b-lg">
+              <button
+                onClick={handleAddVendor}
+                disabled={loading}
+                className="flex-1 bg-green-600 text-white py-2 rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50"
+              >
+                {loading ? '⏳ Menyimpan...' : '💾 Simpan Vendor'}
+              </button>
+              <button
+                onClick={() => {
+                  setShowVendorModal(false);
+                  setNewVendor({ code: '', name: '', contact_person: '', phone: '', email: '' });
+                }}
+                disabled={loading}
+                className="px-6 bg-gray-300 text-gray-700 py-2 rounded-lg font-semibold hover:bg-gray-400"
               >
                 Batal
               </button>
