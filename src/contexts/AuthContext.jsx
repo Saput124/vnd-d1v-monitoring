@@ -1,6 +1,7 @@
-// src/contexts/AuthContext.jsx - UPDATE
+// src/contexts/AuthContext.jsx - WITH ACTIVITY TRACKING
+
 import { createContext, useContext, useState, useEffect } from 'react';
-import { getCurrentUser, signOut } from '../utils/supabase';
+import { getCurrentUser, signOut, updateActivity } from '../utils/supabase';
 
 const AuthContext = createContext();
 
@@ -12,10 +13,42 @@ export function AuthProvider({ children }) {
     const currentUser = getCurrentUser();
     setUser(currentUser);
     setLoading(false);
+
+    // ✅ Track user activity to prevent timeout
+    const activityEvents = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
+    
+    const handleActivity = () => {
+      if (getCurrentUser()) {
+        updateActivity();
+      }
+    };
+
+    // Add activity listeners
+    activityEvents.forEach(event => {
+      window.addEventListener(event, handleActivity, { passive: true });
+    });
+
+    // Periodic check (every minute)
+    const intervalId = setInterval(() => {
+      const user = getCurrentUser();
+      if (!user && currentUser) {
+        // Session expired, reload to login
+        window.location.reload();
+      }
+    }, 60000); // Check every minute
+
+    // Cleanup
+    return () => {
+      activityEvents.forEach(event => {
+        window.removeEventListener(event, handleActivity);
+      });
+      clearInterval(intervalId);
+    };
   }, []);
 
   const login = (userData) => {
     setUser(userData);
+    updateActivity();
   };
 
   const logout = async () => {
