@@ -9,7 +9,6 @@ import MasterData from '../components/MasterData';
 import BlockRegistration from '../components/BlockRegistration';
 import TransactionForm from '../components/TransactionForm';
 import TransactionHistory from '../components/TransactionHistory';
-import ActivityManagement from '../components/ActivityManagement';
 import SectionActivityManagement from '../components/SectionActivityManagement';
 import UserManagement from '../components/UserManagement';
 
