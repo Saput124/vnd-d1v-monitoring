@@ -1,94 +1,111 @@
-//src/components/ActivityManagement.jsx - FIXED VERSION
+// src/components/SectionActivityManagement.jsx
+// KOMPONEN BARU: Untuk assign aktivitas ke sections
 
-import { useState } from 'react';
-import Modal from './Modal';
+import { useState, useEffect } from 'react';
+import { supabase } from '../utils/supabase';
 
-export default function ActivityManagement({ data, loading }) {
-  const [showModal, setShowModal] = useState(false);
-  const [editData, setEditData] = useState(null);
+export default function SectionActivityManagement() {
+  const [sections, setSections] = useState([]);
+  const [activities, setActivities] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedSection, setSelectedSection] = useState('');
 
-  const openModal = (activity = null) => {
-    setEditData(activity);
-    setShowModal(true);
-  };
-
-  const closeModal = () => {
-    setShowModal(false);
-    setEditData(null);
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    
-    const activityData = {
-      code: formData.get('code').toUpperCase().trim(),
-      name: formData.get('name').trim(),
-      description: formData.get('description')?.trim() || null,
-      active: formData.get('active') === 'on'
-    };
-
+  const fetchData = async () => {
+    setLoading(true);
     try {
-      if (editData) {
-        // UPDATE
-        const { error } = await data.supabase
-          .from('activity_types')
-          .update(activityData)
-          .eq('id', editData.id);
-
-        if (error) {
-          console.error('Update activity error:', error);
-          throw new Error(`Gagal update aktivitas: ${error.message}`);
-        }
-        
-        alert('✅ Aktivitas berhasil diupdate!');
-      } else {
-        // INSERT
-        const { error } = await data.supabase
-          .from('activity_types')
-          .insert([activityData]);
-
-        if (error) {
-          console.error('Insert activity error:', error);
-          throw new Error(`Gagal menambah aktivitas: ${error.message}`);
-        }
-        
-        alert('✅ Aktivitas berhasil ditambahkan!');
-      }
+      // Fetch sections
+      const { data: sectionsData, error: sectionsError } = await supabase
+        .from('sections')
+        .select('*')
+        .order('name');
       
-      closeModal();
-      await data.fetchAllData();
-    } catch (err) {
-      console.error('Error saving activity:', err);
-      alert('❌ Error: ' + err.message);
-    }
-  };
+      if (sectionsError) throw sectionsError;
 
-  const handleDelete = async (id, name) => {
-    if (!confirm(`❓ Yakin hapus aktivitas "${name}"?\n\nPeringatan: Semua transaksi terkait akan terpengaruh!`)) {
-      return;
-    }
-
-    try {
-      const { error } = await data.supabase
+      // Fetch activities
+      const { data: activitiesData, error: activitiesError } = await supabase
         .from('activity_types')
-        .delete()
-        .eq('id', id);
-
-      if (error) {
-        console.error('Delete activity error:', error);
-        throw new Error(`Gagal hapus aktivitas: ${error.message}`);
-      }
+        .select('*')
+        .eq('active', true)
+        .order('name');
       
-      alert('✅ Aktivitas berhasil dihapus!');
-      await data.fetchAllData();
+      if (activitiesError) throw activitiesError;
+
+      // Fetch assignments
+      const { data: assignmentsData, error: assignmentsError } = await supabase
+        .from('section_activities')
+        .select(`
+          *,
+          sections(id, code, name),
+          activity_types(id, code, name)
+        `);
+      
+      if (assignmentsError) throw assignmentsError;
+
+      setSections(sectionsData || []);
+      setActivities(activitiesData || []);
+      setAssignments(assignmentsData || []);
     } catch (err) {
-      console.error('Error deleting activity:', err);
-      alert('❌ Error: ' + err.message);
+      console.error('Error fetching data:', err);
+      alert('❌ Error loading data: ' + err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (loading) {
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const isAssigned = (sectionId, activityId) => {
+    return assignments.some(
+      a => a.section_id === sectionId && a.activity_type_id === activityId
+    );
+  };
+
+  const toggleAssignment = async (sectionId, activityId) => {
+    try {
+      setLoading(true);
+      
+      const assigned = isAssigned(sectionId, activityId);
+
+      if (assigned) {
+        // UNASSIGN
+        const { error } = await supabase
+          .from('section_activities')
+          .delete()
+          .eq('section_id', sectionId)
+          .eq('activity_type_id', activityId);
+
+        if (error) throw error;
+        console.log('✅ Unassigned activity from section');
+      } else {
+        // ASSIGN
+        const { error } = await supabase
+          .from('section_activities')
+          .insert([{
+            section_id: sectionId,
+            activity_type_id: activityId
+          }]);
+
+        if (error) throw error;
+        console.log('✅ Assigned activity to section');
+      }
+
+      await fetchData();
+    } catch (err) {
+      console.error('Error toggling assignment:', err);
+      alert('❌ Error: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getAssignedActivitiesCount = (sectionId) => {
+    return assignments.filter(a => a.section_id === sectionId).length;
+  };
+
+  if (loading && sections.length === 0) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -98,191 +115,210 @@ export default function ActivityManagement({ data, loading }) {
 
   return (
     <div className="space-y-6">
+      {/* Info Box */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <p className="text-sm text-blue-800">
-          ℹ️ <strong>Activity Types Management:</strong> Kelola jenis-jenis aktivitas pekerjaan yang tersedia 
-          untuk registrasi blok dan input transaksi. Aktivitas yang sudah memiliki transaksi sebaiknya tidak dihapus.
+          <strong>📋 Section Activity Assignment:</strong> Tetapkan aktivitas mana yang menjadi tanggung jawab setiap section.
+          Section staff hanya bisa registrasi blok dan input transaksi untuk aktivitas yang di-assign ke section mereka.
         </p>
       </div>
 
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <div className="flex justify-between items-center mb-6">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-lg shadow-lg p-6">
+          <p className="text-sm opacity-90 mb-1">Total Sections</p>
+          <p className="text-4xl font-bold">{sections.length}</p>
+        </div>
+        <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-lg shadow-lg p-6">
+          <p className="text-sm opacity-90 mb-1">Total Activities</p>
+          <p className="text-4xl font-bold">{activities.length}</p>
+        </div>
+        <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-lg shadow-lg p-6">
+          <p className="text-sm opacity-90 mb-1">Total Assignments</p>
+          <p className="text-4xl font-bold">{assignments.length}</p>
+        </div>
+      </div>
+
+      {/* Section Selector for Mobile */}
+      <div className="md:hidden">
+        <label className="block text-sm font-medium mb-2">Pilih Section:</label>
+        <select
+          value={selectedSection}
+          onChange={(e) => setSelectedSection(e.target.value)}
+          className="w-full px-4 py-2 border rounded-lg"
+        >
+          <option value="">-- Lihat Semua --</option>
+          {sections.map(s => (
+            <option key={s.id} value={s.id}>
+              {s.name} ({getAssignedActivitiesCount(s.id)} activities)
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Assignment Matrix */}
+      <div className="bg-white rounded-lg shadow-md overflow-hidden">
+        <div className="p-6 border-b">
           <h3 className="text-xl font-bold text-gray-800">
-            🏷️ Daftar Aktivitas ({data.activityTypes.length})
+            📊 Assignment Matrix
           </h3>
-          <button
-            onClick={() => openModal()}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-semibold"
-          >
-            ➕ Tambah Aktivitas
-          </button>
+          <p className="text-sm text-gray-600 mt-1">
+            Klik checkbox untuk assign/unassign aktivitas ke section
+          </p>
         </div>
 
-        {data.activityTypes.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-gray-500 text-lg">Belum ada aktivitas</p>
-            <p className="text-gray-400 text-sm mt-2">Klik "Tambah Aktivitas" untuk memulai</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-gray-100 border-b">
-                  <th className="px-4 py-3 text-left font-semibold">No</th>
-                  <th className="px-4 py-3 text-left font-semibold">Kode</th>
-                  <th className="px-4 py-3 text-left font-semibold">Nama Aktivitas</th>
-                  <th className="px-4 py-3 text-left font-semibold">Deskripsi</th>
-                  <th className="px-4 py-3 text-left font-semibold">Status</th>
-                  <th className="px-4 py-3 text-left font-semibold">Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.activityTypes.map((activity, idx) => (
-                  <tr key={activity.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                    <td className="px-4 py-3">{idx + 1}</td>
-                    <td className="px-4 py-3">
-                      <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded font-mono text-xs font-semibold">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gradient-to-r from-blue-600 to-purple-600 text-white">
+              <tr>
+                <th className="px-6 py-4 text-left font-semibold sticky left-0 bg-blue-600">
+                  Section
+                </th>
+                {activities.map(activity => (
+                  <th key={activity.id} className="px-4 py-4 text-center font-semibold min-w-[120px]">
+                    <div className="flex flex-col items-center gap-1">
+                      <span className="text-xs bg-white text-blue-600 px-2 py-1 rounded font-mono">
                         {activity.code}
                       </span>
-                    </td>
-                    <td className="px-4 py-3 font-semibold">{activity.name}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">
-                      {activity.description || '-'}
-                    </td>
-                    <td className="px-4 py-3">
-                      {activity.active ? (
-                        <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-semibold">
-                          ✓ Active
-                        </span>
-                      ) : (
-                        <span className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs font-semibold">
-                          ✗ Inactive
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => openModal(activity)}
-                          className="text-blue-600 hover:text-blue-800 font-semibold"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          onClick={() => handleDelete(activity.id, activity.name)}
-                          className="text-red-600 hover:text-red-800 font-semibold"
-                        >
-                          🗑️
-                        </button>
+                      <span className="text-sm">{activity.name}</span>
+                    </div>
+                  </th>
+                ))}
+                <th className="px-6 py-4 text-center font-semibold">
+                  Total
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {sections
+                .filter(s => !selectedSection || s.id === selectedSection)
+                .map((section, idx) => (
+                  <tr key={section.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                    <td className="px-6 py-4 font-semibold sticky left-0 bg-inherit border-r">
+                      <div className="flex flex-col">
+                        <span className="text-blue-600">{section.name}</span>
+                        <span className="text-xs text-gray-500 font-mono">{section.code}</span>
                       </div>
+                    </td>
+                    {activities.map(activity => {
+                      const assigned = isAssigned(section.id, activity.id);
+                      return (
+                        <td key={activity.id} className="px-4 py-4 text-center border-r">
+                          <label className="inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={assigned}
+                              onChange={() => toggleAssignment(section.id, activity.id)}
+                              disabled={loading}
+                              className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                            />
+                          </label>
+                          {assigned && (
+                            <div className="mt-1 text-xs text-green-600 font-semibold">
+                              ✓ Active
+                            </div>
+                          )}
+                        </td>
+                      );
+                    })}
+                    <td className="px-6 py-4 text-center font-bold text-blue-600 border-l">
+                      {getAssignedActivitiesCount(section.id)}
                     </td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Default Activities Info */}
-      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-        <p className="text-sm text-green-800 font-semibold mb-2">📋 Aktivitas Standard:</p>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs text-green-700">
-          <div className="bg-white p-2 rounded">
-            <strong>TANAM</strong> - Penanaman
-          </div>
-          <div className="bg-white p-2 rounded">
-            <strong>KELENTEK</strong> - Pembersihan Kelentek
-          </div>
-          <div className="bg-white p-2 rounded">
-            <strong>WEEDING</strong> - Penyiangan (1-3x)
-          </div>
-          <div className="bg-white p-2 rounded">
-            <strong>WEED_CONTROL</strong> - Pengendalian Gulma (Herbisida)
-          </div>
-          <div className="bg-white p-2 rounded">
-            <strong>PANEN</strong> - Pemanenan
-          </div>
+            </tbody>
+            <tfoot className="bg-gray-100 border-t-2">
+              <tr>
+                <td className="px-6 py-4 font-bold sticky left-0 bg-gray-100">
+                  Total Sections
+                </td>
+                {activities.map(activity => {
+                  const count = assignments.filter(
+                    a => a.activity_type_id === activity.id
+                  ).length;
+                  return (
+                    <td key={activity.id} className="px-4 py-4 text-center font-bold text-purple-600">
+                      {count}
+                    </td>
+                  );
+                })}
+                <td className="px-6 py-4 text-center font-bold text-gray-800">
+                  {assignments.length}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
         </div>
-        <p className="text-xs text-green-600 mt-2">
-          💡 Anda dapat menambah aktivitas custom sesuai kebutuhan perusahaan
-        </p>
       </div>
 
-      {/* Modal */}
-      <Modal
-        show={showModal}
-        onClose={closeModal}
-        title={editData ? '✏️ Edit Aktivitas' : '➕ Tambah Aktivitas'}
-      >
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">Kode Aktivitas *</label>
-            <input
-              name="code"
-              defaultValue={editData?.code || ''}
-              required
-              className="w-full px-4 py-2 border rounded-lg uppercase"
-              placeholder="TANAM"
-              maxLength={50}
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Gunakan huruf kapital tanpa spasi. Contoh: TANAM, WEEDING, PANEN
-            </p>
-          </div>
+      {/* Detailed Assignments List */}
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <h3 className="text-xl font-bold text-gray-800 mb-4">
+          📝 Detailed Assignments
+        </h3>
 
-          <div>
-            <label className="block text-sm font-medium mb-2">Nama Aktivitas *</label>
-            <input
-              name="name"
-              defaultValue={editData?.name || ''}
-              required
-              className="w-full px-4 py-2 border rounded-lg"
-              placeholder="Penanaman"
-            />
-          </div>
+        {sections.map(section => {
+          const sectionAssignments = assignments.filter(
+            a => a.section_id === section.id
+          );
 
-          <div>
-            <label className="block text-sm font-medium mb-2">Deskripsi (Opsional)</label>
-            <textarea
-              name="description"
-              defaultValue={editData?.description || ''}
-              className="w-full px-4 py-2 border rounded-lg"
-              rows={3}
-              placeholder="Deskripsi singkat tentang aktivitas ini..."
-            />
-          </div>
+          if (selectedSection && section.id !== selectedSection) return null;
 
-          <div>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                name="active"
-                defaultChecked={editData?.active !== false}
-                className="w-4 h-4"
-              />
-              <span className="font-medium">Active</span>
-              <span className="text-sm text-gray-500">(Aktivitas dapat digunakan)</span>
-            </label>
-          </div>
+          return (
+            <div key={section.id} className="mb-4 p-4 border rounded-lg">
+              <div className="flex justify-between items-center mb-3">
+                <div>
+                  <h4 className="font-bold text-blue-600">{section.name}</h4>
+                  <p className="text-xs text-gray-500">Code: {section.code}</p>
+                </div>
+                <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-semibold">
+                  {sectionAssignments.length} activities
+                </span>
+              </div>
 
-          <div className="flex gap-3 pt-4 border-t">
-            <button
-              type="submit"
-              className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 font-semibold"
-            >
-              💾 Simpan
-            </button>
-            <button
-              type="button"
-              onClick={closeModal}
-              className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400"
-            >
-              Batal
-            </button>
-          </div>
-        </form>
-      </Modal>
+              {sectionAssignments.length === 0 ? (
+                <p className="text-sm text-gray-500 italic">
+                  ⚠️ Belum ada aktivitas yang di-assign ke section ini
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {sectionAssignments.map(assignment => (
+                    <div
+                      key={assignment.id}
+                      className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2"
+                    >
+                      <span className="text-xs bg-green-600 text-white px-2 py-0.5 rounded font-mono">
+                        {assignment.activity_types.code}
+                      </span>
+                      <span className="text-sm font-medium text-gray-700">
+                        {assignment.activity_types.name}
+                      </span>
+                      <button
+                        onClick={() => toggleAssignment(section.id, assignment.activity_type_id)}
+                        disabled={loading}
+                        className="ml-2 text-red-600 hover:text-red-800 disabled:opacity-50"
+                        title="Remove assignment"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Warning if sections have no assignments */}
+      {sections.some(s => getAssignedActivitiesCount(s.id) === 0) && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <p className="text-sm text-yellow-800">
+            <strong>⚠️ Warning:</strong> Beberapa section belum di-assign aktivitas apapun.
+            Section staff tidak akan bisa registrasi blok atau input transaksi sampai aktivitas di-assign.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
