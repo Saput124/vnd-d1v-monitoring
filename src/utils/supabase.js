@@ -1,4 +1,4 @@
-// src/utils/supabase.js - FIXED VERSION
+// src/utils/supabase.js - FIXED: sessionStorage + Activity Tracking
 
 import { createClient } from '@supabase/supabase-js';
 
@@ -11,9 +11,24 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// 🔧 FIX: Gunakan sessionStorage agar tiap tab INDEPENDEN
-// sessionStorage = per tab, localStorage = shared across tabs
+// ✅ SOLUTION: sessionStorage (per-tab) + Activity tracking untuk prevent auto-logout
 const STORAGE_KEY = 'vnd_user_session';
+const LAST_ACTIVITY_KEY = 'vnd_last_activity';
+const SESSION_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+
+// Update last activity timestamp
+export const updateActivity = () => {
+  sessionStorage.setItem(LAST_ACTIVITY_KEY, Date.now().toString());
+};
+
+// Check if session is still valid
+const isSessionValid = () => {
+  const lastActivity = sessionStorage.getItem(LAST_ACTIVITY_KEY);
+  if (!lastActivity) return false;
+  
+  const elapsed = Date.now() - parseInt(lastActivity);
+  return elapsed < SESSION_TIMEOUT;
+};
 
 export const signIn = async (username, password) => {
   try {
@@ -100,8 +115,9 @@ export const signIn = async (username, password) => {
     
     console.log('✅ Login Success:', fullUserData);
     
-    // 🔧 FIX: Simpan di sessionStorage (per-tab), bukan localStorage
+    // ✅ Save to sessionStorage (per-tab independent)
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(fullUserData));
+    updateActivity(); // Set initial activity timestamp
     
     return { data: { user: fullUserData }, error: null };
   } catch (err) {
@@ -115,12 +131,29 @@ export const signIn = async (username, password) => {
 
 export const signOut = async () => {
   sessionStorage.removeItem(STORAGE_KEY);
+  sessionStorage.removeItem(LAST_ACTIVITY_KEY);
   return { error: null };
 };
 
 export const getCurrentUser = () => {
   const userStr = sessionStorage.getItem(STORAGE_KEY);
-  return userStr ? JSON.parse(userStr) : null;
+  if (!userStr) return null;
+  
+  // Check session validity
+  if (!isSessionValid()) {
+    console.log('⏰ Session timeout - logging out');
+    sessionStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem(LAST_ACTIVITY_KEY);
+    return null;
+  }
+  
+  try {
+    return JSON.parse(userStr);
+  } catch (err) {
+    console.error('Error parsing user data:', err);
+    sessionStorage.removeItem(STORAGE_KEY);
+    return null;
+  }
 };
 
 export const isAuthenticated = () => {
