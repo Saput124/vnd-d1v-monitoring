@@ -89,16 +89,32 @@ export function useSupabaseData() {
       }
 
       // ============================================================================
-      // 4️⃣ BLOCK_ACTIVITIES - Filter by section_id (STRICT)
+      // 4️⃣ BLOCK_ACTIVITIES - Filter by section_id + section_activities
       // ============================================================================
       let blockActivitiesQuery = supabase
         .from('block_activities')
         .select('*')
         .order('target_bulan, created_at');
 
-      // ✅ STRICT FILTER: Section staff HANYA lihat block_activities section mereka
+      // ✅ FIX: Section staff lihat block_activities untuk activities yang di-assign ke mereka
       if (isSectionStaff && currentUser?.section_id) {
-        blockActivitiesQuery = blockActivitiesQuery.eq('section_id', currentUser.section_id);
+        // Get assigned activity IDs for this section
+        const { data: sectionActivities } = await supabase
+          .from('section_activities')
+          .select('activity_type_id')
+          .eq('section_id', currentUser.section_id);
+        
+        const assignedActivityIds = sectionActivities?.map(sa => sa.activity_type_id) || [];
+        
+        if (assignedActivityIds.length > 0) {
+          // Filter by section_id AND assigned activities
+          blockActivitiesQuery = blockActivitiesQuery
+            .eq('section_id', currentUser.section_id)
+            .in('activity_type_id', assignedActivityIds);
+        } else {
+          // No activities assigned, return empty
+          blockActivitiesQuery = blockActivitiesQuery.limit(0);
+        }
       } else if (isVendor && currentUser?.vendor_sections?.length > 0) {
         // Vendor: block_activities dari semua section yang mereka layani
         const vendorSectionIds = currentUser.vendor_sections.map(s => s.id);
