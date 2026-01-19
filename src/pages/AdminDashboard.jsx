@@ -1,10 +1,11 @@
-// src/pages/AdminDashboard.jsx - UPDATED WITH DASHBOARD & HISTORY
+//src/pages/AdminDashboard.jsx - FIXED WITH ACTIVITY MANAGEMENT TAB
 
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSupabaseData } from '../hooks/useSupabaseData';
 import Dashboard from '../components/Dashboard';
 import MasterData from '../components/MasterData';
+import ActivityManagement from '../components/ActivityManagement';
 import BlockRegistration from '../components/BlockRegistration';
 import TransactionForm from '../components/TransactionForm';
 import TransactionHistory from '../components/TransactionHistory';
@@ -45,12 +46,13 @@ export default function AdminDashboard() {
         <div className="container mx-auto px-4">
           <div className="flex space-x-1 overflow-x-auto">
             {[
-              { id: 'dashboard', label: 'Dashboard' },
-              { id: 'history', label: 'Transaksi History' },
-              { id: 'transaction', label: 'Input Transaksi' },
-              { id: 'registration', label: 'Block Registration' },
-              { id: 'master', label: 'Master Data' },
-              { id: 'users', label: 'User Management' },
+              { id: 'dashboard', label: '📊 Dashboard' },
+              { id: 'history', label: '📋 History' },
+              { id: 'transaction', label: '➕ Input Transaksi' },
+              { id: 'registration', label: '🗺️ Block Registration' },
+              { id: 'activities', label: '🏷️ Activity Types' },
+              { id: 'master', label: '📦 Master Data' },
+              { id: 'users', label: '👥 Users' },
             ].map(tab => (
               <button
                 key={tab.id}
@@ -74,6 +76,7 @@ export default function AdminDashboard() {
         {activeTab === 'history' && <TransactionHistory data={data} loading={data.loading} />}
         {activeTab === 'transaction' && <TransactionForm data={data} loading={data.loading} />}
         {activeTab === 'registration' && <BlockRegistration data={data} loading={data.loading} />}
+        {activeTab === 'activities' && <ActivityManagement data={data} loading={data.loading} />}
         {activeTab === 'master' && <MasterData data={data} loading={data.loading} />}
         {activeTab === 'users' && <UserManagement />}
       </div>
