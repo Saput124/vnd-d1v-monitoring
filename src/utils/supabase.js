@@ -58,6 +58,23 @@ export const signIn = async (username, password) => {
         error: { message: 'Password salah' } 
       };
     }
+
+export const signInAuth = async (email, password) => {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  if (error) throw error;
+
+  const { data: profile } = await supabase
+    .from('users')
+    .select('*')
+    .eq('auth_user_id', data.user.id)
+    .single();
+
+  return profile;
+};
     
     // 3. Initialize additional data
     let vendor_id = null;
