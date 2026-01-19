@@ -12,7 +12,8 @@ export default function Dashboard({ data, loading }) {
     zone: '',
     periode_start: '',
     periode_end: '',
-    kondisi: ''
+    kondisi: '',
+    show_completed: false // ✅ NEW: Toggle untuk show completed
   });
 
   // ============================================================================
@@ -55,6 +56,13 @@ export default function Dashboard({ data, loading }) {
   // ============================================================================
   const filteredProgress = useMemo(() => {
     let filtered = [...progressData];
+
+    // ✅ Filter status: Default hide completed, kecuali user centang "Show Completed"
+    if (!filters.show_completed) {
+      filtered = filtered.filter(p => 
+        p.status !== 'completed' && p.status !== 'cancelled'
+      );
+    }
 
     if (filters.section_id) {
       filtered = filtered.filter(p => p.section_id === filters.section_id);
@@ -358,13 +366,32 @@ export default function Dashboard({ data, loading }) {
                 zone: '',
                 periode_start: '',
                 periode_end: '',
-                kondisi: ''
+                kondisi: '',
+                show_completed: false
               })}
               className="w-full bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 text-sm"
             >
               🔄 Reset Filter
             </button>
           </div>
+        </div>
+
+        {/* ✅ NEW: Show Completed Toggle */}
+        <div className="mt-4 flex items-center gap-2">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={filters.show_completed}
+              onChange={(e) => setFilters({...filters, show_completed: e.target.checked})}
+              className="w-4 h-4"
+            />
+            <span className="text-sm font-medium text-gray-700">
+              Tampilkan blok yang sudah selesai (completed)
+            </span>
+          </label>
+          <span className="text-xs text-gray-500">
+            ({filters.show_completed ? 'Menampilkan semua' : 'Hanya pending & in progress'})
+          </span>
         </div>
       </div>
 
@@ -499,9 +526,15 @@ export default function Dashboard({ data, loading }) {
       {/* DETAILED TABLE: Block Activities Progress */}
       {/* ====================================================================== */}
       <div className="bg-white rounded-lg shadow-md p-6">
-        <h3 className="text-xl font-bold text-gray-800 mb-4">
-          📋 Detail Progress per Blok ({filteredProgress.length} blok)
-        </h3>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-xl font-bold text-gray-800">
+            📋 Detail Progress per Blok
+          </h3>
+          <div className="text-sm">
+            <span className="font-semibold text-blue-600">{filteredProgress.length}</span>
+            <span className="text-gray-600"> blok {filters.show_completed ? '(semua)' : '(aktif)'}</span>
+          </div>
+        </div>
 
         {filteredProgress.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
