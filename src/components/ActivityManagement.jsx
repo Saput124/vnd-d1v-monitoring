@@ -1,3 +1,5 @@
+//src/components/ActivityManagement.jsx - FIXED VERSION
+
 import { useState } from 'react';
 import Modal from './Modal';
 
@@ -20,22 +22,44 @@ export default function ActivityManagement({ data, loading }) {
     const formData = new FormData(e.target);
     
     const activityData = {
-      code: formData.get('code').toUpperCase(),
-      name: formData.get('name'),
-      description: formData.get('description') || null,
+      code: formData.get('code').toUpperCase().trim(),
+      name: formData.get('name').trim(),
+      description: formData.get('description')?.trim() || null,
       active: formData.get('active') === 'on'
     };
 
     try {
       if (editData) {
-        await data.updateActivityType(editData.id, activityData);
+        // UPDATE
+        const { error } = await data.supabase
+          .from('activity_types')
+          .update(activityData)
+          .eq('id', editData.id);
+
+        if (error) {
+          console.error('Update activity error:', error);
+          throw new Error(`Gagal update aktivitas: ${error.message}`);
+        }
+        
         alert('✅ Aktivitas berhasil diupdate!');
       } else {
-        await data.addActivityType(activityData);
+        // INSERT
+        const { error } = await data.supabase
+          .from('activity_types')
+          .insert([activityData]);
+
+        if (error) {
+          console.error('Insert activity error:', error);
+          throw new Error(`Gagal menambah aktivitas: ${error.message}`);
+        }
+        
         alert('✅ Aktivitas berhasil ditambahkan!');
       }
+      
       closeModal();
+      await data.fetchAllData();
     } catch (err) {
+      console.error('Error saving activity:', err);
       alert('❌ Error: ' + err.message);
     }
   };
@@ -46,9 +70,20 @@ export default function ActivityManagement({ data, loading }) {
     }
 
     try {
-      await data.deleteActivityType(id);
+      const { error } = await data.supabase
+        .from('activity_types')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('Delete activity error:', error);
+        throw new Error(`Gagal hapus aktivitas: ${error.message}`);
+      }
+      
       alert('✅ Aktivitas berhasil dihapus!');
+      await data.fetchAllData();
     } catch (err) {
+      console.error('Error deleting activity:', err);
       alert('❌ Error: ' + err.message);
     }
   };
