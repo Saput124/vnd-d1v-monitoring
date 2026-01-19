@@ -42,14 +42,14 @@ export default function VendorDashboard() {
         <div className="container mx-auto px-4">
           <div className="flex space-x-1 overflow-x-auto">
             {[
-              { id: 'dashboard', label: '📊 Dashboard' },
-              { id: 'history', label: '📋 Transaksi History' },
-              { id: 'transaction', label: '➕ Input Transaksi' },
+              { id: 'dashboard', label: 'Dashboard' },
+              { id: 'history', label: 'Transaksi History' },
+              { id: 'transaction', label: 'Input Transaksi' },
             ].map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-6 py-4 font-medium transition-all whitespace-nowrap ${
+                className={`px-6 py-4 font-medium transition-all whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'text-green-600 border-b-2 border-green-600 bg-green-50'
                     : 'text-gray-600 hover:text-green-600 hover:bg-gray-50'
