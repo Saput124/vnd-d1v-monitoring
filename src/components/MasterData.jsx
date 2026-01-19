@@ -13,7 +13,7 @@ export default function MasterData({ data, loading }) {
   
   // State untuk bulk import dengan tabel
   const [bulkRows, setBulkRows] = useState([
-    { code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '', section_id: '' }
+    { code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '' }
   ]);
 
   // Fetch sections for dropdown
@@ -86,14 +86,8 @@ export default function MasterData({ data, loading }) {
       zone: formData.get('zone'),
       kategori: formData.get('kategori'),
       varietas: formData.get('varietas'),
-      luas_total: parseDecimal(formData.get('luas_total')),
-      section_id: formData.get('section_id') || null
+      luas_total: parseDecimal(formData.get('luas_total'))
     };
-
-    // Auto-assign section untuk non-admin jika tidak dipilih
-    if (!blockData.section_id && data.currentUser?.role !== 'admin' && data.currentUser?.section_id) {
-      blockData.section_id = data.currentUser.section_id;
-    }
 
     try {
       if (editData) {
@@ -157,7 +151,7 @@ export default function MasterData({ data, loading }) {
         cols = line.split('|').map(c => c.trim());
       } else {
         if (startFieldIndex >= 0) {
-          const row = { code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '', section_id: '' };
+          const row = { code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '' };
           row[startField] = line;
           newRows.push(row);
         }
@@ -204,7 +198,7 @@ export default function MasterData({ data, loading }) {
   };
 
   const addBulkRow = () => {
-    setBulkRows([...bulkRows, { code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '', section_id: '' }]);
+    setBulkRows([...bulkRows, { code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '' }]);
   };
 
   const removeBulkRow = (index) => {
@@ -221,11 +215,6 @@ export default function MasterData({ data, loading }) {
       return;
     }
 
-    // Default section untuk bulk import (non-admin)
-    const defaultSectionId = data.currentUser?.role !== 'admin' && data.currentUser?.section_id
-      ? data.currentUser.section_id
-      : null;
-
     try {
       for (const row of validRows) {
         await data.addBlock({
@@ -234,14 +223,13 @@ export default function MasterData({ data, loading }) {
           zone: row.zone,
           kategori: row.kategori,
           varietas: row.varietas,
-          luas_total: parseDecimal(row.luas_total) || 0,
-          section_id: row.section_id || defaultSectionId
+          luas_total: parseDecimal(row.luas_total) || 0
         });
       }
 
       alert(`✅ Berhasil import ${validRows.length} blok!`);
       setShowBulkModal(false);
-      setBulkRows([{ code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '', section_id: '' }]);
+      setBulkRows([{ code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '' }]);
     } catch (err) {
       alert('❌ Error: ' + err.message);
     }
@@ -544,39 +532,16 @@ export default function MasterData({ data, loading }) {
         </form>
       </Modal>
 
-      {/* Modal: Block - WITH SECTION DROPDOWN */}
+      {/* Modal: Block - NO SECTION FIELD */}
       <Modal show={showModal && modalType === 'block'} onClose={closeModal} title={editData ? 'Edit Blok' : 'Tambah Blok'}>
         <form onSubmit={handleBlockSubmit} className="space-y-4">
-          {/* Section Assignment */}
-          {data.currentUser?.role === 'admin' && (
-            <div>
-              <label className="block text-sm font-medium mb-2">Section *</label>
-              <select name="section_id" defaultValue={editData?.section_id || ''} required className="w-full px-4 py-2 border rounded-lg">
-                <option value="">-- Pilih Section --</option>
-                {sections.map(s => (
-                  <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
-                ))}
-              </select>
-              <p className="text-xs text-gray-500 mt-1">⚠️ Pilih section tempat blok ini berada</p>
-            </div>
-          )}
-
-          {data.currentUser?.role !== 'admin' && data.currentUser?.section_name && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <p className="text-sm text-blue-800">
-                <strong>Section:</strong> {data.currentUser.section_name}
-                <input type="hidden" name="section_id" value={data.currentUser.section_id} />
-              </p>
-            </div>
-          )}
-
           <div>
             <label className="block text-sm font-medium mb-2">Kode Blok</label>
             <input name="code" defaultValue={editData?.code || ''} required className="w-full px-4 py-2 border rounded-lg" placeholder="BLOK-001" />
           </div>
           <div>
             <label className="block text-sm font-medium mb-2">Nama Blok</label>
-            <input name="name" defaultValue={editData?.name || ''} required className="w-full px-4 py-2 border rounded-lg" placeholder="Blok A" />
+            <input name="name" defaultValue={editData?.name || ''} required className="w-full px-4 py-2 border rounded-lg" placeholder="66 BU 10" />
           </div>
           <div>
             <label className="block text-sm font-medium mb-2">Zone</label>
@@ -617,6 +582,14 @@ export default function MasterData({ data, loading }) {
             <label className="block text-sm font-medium mb-2">Luas Total (Ha)</label>
             <input name="luas_total" type="number" step="0.01" defaultValue={editData?.luas_total || ''} required className="w-full px-4 py-2 border rounded-lg" placeholder="8.00" />
           </div>
+          
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+            <p className="text-xs text-yellow-800">
+              💡 <strong>Info:</strong> Blok ini akan tersedia untuk semua section. 
+              Section akan "mengklaim" blok ini via Block Registration untuk aktivitas mereka.
+            </p>
+          </div>
+
           <div className="flex gap-3">
             <button type="submit" className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700">Simpan</button>
             <button type="button" onClick={closeModal} className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400">Batal</button>
@@ -677,9 +650,6 @@ export default function MasterData({ data, loading }) {
                   <th className="px-2 py-2 text-left font-semibold">Kategori</th>
                   <th className="px-2 py-2 text-left font-semibold">Varietas</th>
                   <th className="px-2 py-2 text-left font-semibold">Luas (Ha)</th>
-                  {data.currentUser?.role === 'admin' && (
-                    <th className="px-2 py-2 text-left font-semibold">Section</th>
-                  )}
                   <th className="px-2 py-2 text-left font-semibold">Aksi</th>
                 </tr>
               </thead>
@@ -749,20 +719,6 @@ export default function MasterData({ data, loading }) {
                         placeholder="8.00"
                       />
                     </td>
-                    {data.currentUser?.role === 'admin' && (
-                      <td className="px-2 py-2">
-                        <select
-                          value={row.section_id}
-                          onChange={(e) => updateBulkRow(index, 'section_id', e.target.value)}
-                          className="w-full px-2 py-1 border rounded text-sm"
-                        >
-                          <option value="">--</option>
-                          {sections.map(s => (
-                            <option key={s.id} value={s.id}>{s.code}</option>
-                          ))}
-                        </select>
-                      </td>
-                    )}
                     <td className="px-2 py-2">
                       <button
                         type="button"
@@ -796,7 +752,7 @@ export default function MasterData({ data, loading }) {
             <button
               onClick={() => {
                 setShowBulkModal(false);
-                setBulkRows([{ code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '', section_id: '' }]);
+                setBulkRows([{ code: '', name: '', zone: '', kategori: '', varietas: '', luas_total: '' }]);
               }}
               className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400"
             >
