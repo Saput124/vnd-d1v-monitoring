@@ -1,3 +1,5 @@
+// src/components/UserManagement.jsx - FIXED VERSION
+
 import { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase';
 import Modal from './Modal';
@@ -200,11 +202,12 @@ export default function UserManagement() {
         const updateData = {
           password_hash: formData.password_hash,
           full_name: formData.full_name,
-          email: formData.email,
-          phone: formData.phone,
+          email: formData.email || null,
+          phone: formData.phone || null,
           role: formData.role,
           section_id: ['section_head', 'supervisor'].includes(formData.role) ? formData.section_id : null,
-          active: formData.active
+          active: formData.active,
+          updated_at: new Date().toISOString()
         };
 
         const { error: updateError } = await supabase
@@ -212,22 +215,45 @@ export default function UserManagement() {
           .update(updateData)
           .eq('id', formData.id);
 
-        if (updateError) throw updateError;
+        if (updateError) {
+          console.error('Update user error:', updateError);
+          throw new Error(`Gagal update user: ${updateError.message}`);
+        }
 
         // Delete existing user_vendors
-        await supabase.from('user_vendors').delete().eq('user_id', formData.id);
+        const { error: deleteUVError } = await supabase
+          .from('user_vendors')
+          .delete()
+          .eq('user_id', formData.id);
+
+        if (deleteUVError) {
+          console.error('Delete user_vendors error:', deleteUVError);
+        }
 
         // Handle vendor role
         if (formData.role === 'vendor' && formData.vendor_id) {
           // Insert user_vendors
           const { error: uvError } = await supabase
             .from('user_vendors')
-            .insert([{ user_id: formData.id, vendor_id: formData.vendor_id }]);
+            .insert([{ 
+              user_id: formData.id, 
+              vendor_id: formData.vendor_id 
+            }]);
           
-          if (uvError) throw uvError;
+          if (uvError) {
+            console.error('Insert user_vendors error:', uvError);
+            throw new Error(`Gagal assign vendor: ${uvError.message}`);
+          }
 
           // Update vendor_sections (delete old, insert new)
-          await supabase.from('vendor_sections').delete().eq('vendor_id', formData.vendor_id);
+          const { error: deleteVSError } = await supabase
+            .from('vendor_sections')
+            .delete()
+            .eq('vendor_id', formData.vendor_id);
+
+          if (deleteVSError) {
+            console.error('Delete vendor_sections error:', deleteVSError);
+          }
 
           if (formData.vendor_sections.length > 0) {
             const vendorSectionInserts = formData.vendor_sections.map(sectionId => ({
@@ -239,37 +265,51 @@ export default function UserManagement() {
               .from('vendor_sections')
               .insert(vendorSectionInserts);
 
-            if (vsError) throw vsError;
+            if (vsError) {
+              console.error('Insert vendor_sections error:', vsError);
+              throw new Error(`Gagal assign sections: ${vsError.message}`);
+            }
           }
         }
 
         alert('✅ User berhasil diupdate!');
       } else {
         // ========== INSERT NEW USER ==========
+        const insertData = {
+          username: formData.username.trim(),
+          password_hash: formData.password_hash,
+          full_name: formData.full_name.trim(),
+          email: formData.email?.trim() || null,
+          phone: formData.phone?.trim() || null,
+          role: formData.role,
+          section_id: ['section_head', 'supervisor'].includes(formData.role) ? formData.section_id : null,
+          active: formData.active
+        };
+
         const { data: newUser, error: insertError } = await supabase
           .from('users')
-          .insert([{
-            username: formData.username,
-            password_hash: formData.password_hash,
-            full_name: formData.full_name,
-            email: formData.email,
-            phone: formData.phone,
-            role: formData.role,
-            section_id: ['section_head', 'supervisor'].includes(formData.role) ? formData.section_id : null,
-            active: formData.active
-          }])
+          .insert([insertData])
           .select()
           .single();
 
-        if (insertError) throw insertError;
+        if (insertError) {
+          console.error('Insert user error:', insertError);
+          throw new Error(`Gagal menambah user: ${insertError.message}`);
+        }
 
         if (formData.role === 'vendor' && formData.vendor_id) {
           // Insert user_vendors
           const { error: uvError } = await supabase
             .from('user_vendors')
-            .insert([{ user_id: newUser.id, vendor_id: formData.vendor_id }]);
+            .insert([{ 
+              user_id: newUser.id, 
+              vendor_id: formData.vendor_id 
+            }]);
 
-          if (uvError) throw uvError;
+          if (uvError) {
+            console.error('Insert user_vendors error:', uvError);
+            throw new Error(`Gagal assign vendor: ${uvError.message}`);
+          }
 
           // Insert vendor_sections
           if (formData.vendor_sections.length > 0) {
@@ -282,7 +322,10 @@ export default function UserManagement() {
               .from('vendor_sections')
               .insert(vendorSectionInserts);
 
-            if (vsError) throw vsError;
+            if (vsError) {
+              console.error('Insert vendor_sections error:', vsError);
+              throw new Error(`Gagal assign sections: ${vsError.message}`);
+            }
           }
         }
 
@@ -307,7 +350,7 @@ export default function UserManagement() {
     try {
       setLoading(true);
       
-      // Delete user_vendors first (cascade will handle it, but be explicit)
+      // Delete user_vendors first
       await supabase.from('user_vendors').delete().eq('user_id', userId);
       
       // Delete user
@@ -343,7 +386,10 @@ export default function UserManagement() {
       setLoading(true);
       const { error } = await supabase
         .from('sections')
-        .insert([{ code: newSection.code, name: newSection.name }]);
+        .insert([{ 
+          code: newSection.code.trim(), 
+          name: newSection.name.trim() 
+        }]);
 
       if (error) throw error;
 
@@ -370,11 +416,11 @@ export default function UserManagement() {
       const { error } = await supabase
         .from('vendors')
         .insert([{
-          code: newVendor.code,
-          name: newVendor.name,
-          contact_person: newVendor.contact_person,
-          phone: newVendor.phone,
-          email: newVendor.email
+          code: newVendor.code.trim(),
+          name: newVendor.name.trim(),
+          contact_person: newVendor.contact_person?.trim() || null,
+          phone: newVendor.phone?.trim() || null,
+          email: newVendor.email?.trim() || null
         }]);
 
       if (error) throw error;
