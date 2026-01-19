@@ -1,3 +1,6 @@
+// src/components/BlockRegistration.jsx - FIXED VERSION
+// Tambahkan warning jika activityTypes kosong
+
 import { useState, useMemo } from 'react';
 import Modal from './Modal';
 
@@ -12,6 +15,9 @@ export default function BlockRegistration({ data, loading }) {
   const [zoneFilter, setZoneFilter] = useState('');
   const [kategoriFilter, setKategoriFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Check if no activities available
+  const hasNoActivities = data.activityTypes.length === 0;
 
   // Filter available blocks
   const availableBlocks = useMemo(() => {
@@ -36,7 +42,6 @@ export default function BlockRegistration({ data, loading }) {
     return filtered;
   }, [data.blocks, zoneFilter, kategoriFilter, searchQuery]);
 
-  // Get unique zones and categories
   const uniqueZones = [...new Set(data.blocks.map(b => b.zone))];
   const uniqueKategori = [...new Set(data.blocks.map(b => b.kategori).filter(Boolean))];
 
@@ -53,15 +58,13 @@ export default function BlockRegistration({ data, loading }) {
     e.preventDefault();
 
     if (formData.selected_blocks.length === 0) {
-      alert('❌ Pilih minimal 1 blok!');
+      alert('⚠️ Pilih minimal 1 blok!');
       return;
     }
 
     try {
-      // Get selected activity
       const activity = data.activityTypes.find(a => a.id === formData.activity_type_id);
       
-      // Register each selected block
       for (const blockId of formData.selected_blocks) {
         const block = data.blocks.find(b => b.id === blockId);
         
@@ -80,7 +83,6 @@ export default function BlockRegistration({ data, loading }) {
 
       alert(`✅ Berhasil registrasi ${formData.selected_blocks.length} blok untuk ${activity.name}!`);
       
-      // Reset form
       setFormData({
         activity_type_id: '',
         target_bulan: '',
@@ -94,7 +96,7 @@ export default function BlockRegistration({ data, loading }) {
   };
 
   const handleDelete = async (id, blockName) => {
-    if (!confirm(`❓ Yakin hapus registrasi ${blockName}?`)) return;
+    if (!confirm(`⚠️ Yakin hapus registrasi ${blockName}?`)) return;
 
     try {
       await data.deleteBlockActivity(id);
@@ -114,11 +116,45 @@ export default function BlockRegistration({ data, loading }) {
 
   return (
     <div className="space-y-6">
+      {/* Warning: No Activities Available */}
+      {hasNoActivities && (
+        <div className="bg-red-50 border-2 border-red-300 rounded-lg p-6">
+          <div className="flex items-start gap-4">
+            <div className="text-4xl">🚫</div>
+            <div className="flex-1">
+              <h3 className="text-xl font-bold text-red-800 mb-2">
+                Tidak Ada Aktivitas Tersedia
+              </h3>
+              <p className="text-red-700 mb-4">
+                {data.currentUser?.role === 'admin' 
+                  ? 'Anda perlu menambahkan Activity Types terlebih dahulu, lalu assign ke sections di menu "Section Activities".'
+                  : 'Section Anda belum di-assign aktivitas apapun. Hubungi admin untuk assign aktivitas ke section Anda.'}
+              </p>
+              <div className="space-y-2 text-sm text-red-600">
+                <p><strong>Langkah yang harus dilakukan (Admin):</strong></p>
+                <ol className="list-decimal ml-5 space-y-1">
+                  <li>Buka menu <strong>"Activity Management"</strong></li>
+                  <li>Tambahkan activity types (TANAM, KELENTEK, WEEDING, dll)</li>
+                  <li>Buka menu <strong>"Section Activities"</strong></li>
+                  <li>Assign activities ke section yang sesuai</li>
+                  <li>Baru bisa melakukan block registration</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Info Box */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <p className="text-sm text-blue-800">
-          ℹ️ <strong>Block Registration & Status:</strong> Registrasikan blok untuk aktivitas tertentu (Tanam, Kelentek, dll) 
+          <strong>📋 Block Registration & Status:</strong> Registrasikan blok untuk aktivitas tertentu 
           dan monitor progress real-time dari transaksi yang masuk.
+          {data.currentUser?.role !== 'admin' && (
+            <span className="block mt-1 text-xs">
+              ℹ️ Anda hanya bisa registrasi blok untuk aktivitas yang di-assign ke section Anda.
+            </span>
+          )}
         </p>
       </div>
 
@@ -128,7 +164,9 @@ export default function BlockRegistration({ data, loading }) {
           <h3 className="text-xl font-bold text-gray-800">📋 Block Registration & Status</h3>
           <button
             onClick={() => setShowModal(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-semibold"
+            disabled={hasNoActivities}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+            title={hasNoActivities ? 'Tidak ada aktivitas tersedia' : 'Registrasi Blok Baru'}
           >
             ➕ Registrasi Blok Baru
           </button>
@@ -143,8 +181,13 @@ export default function BlockRegistration({ data, loading }) {
 
         {data.blockActivities.length === 0 ? (
           <div className="text-center py-12">
+            <div className="text-6xl mb-4">📋</div>
             <p className="text-gray-500 text-lg">Belum ada blok yang diregistrasi</p>
-            <p className="text-gray-400 text-sm mt-2">Klik "Registrasi Blok Baru" untuk memulai</p>
+            <p className="text-gray-400 text-sm mt-2">
+              {hasNoActivities 
+                ? 'Selesaikan setup aktivitas terlebih dahulu'
+                : 'Klik "Registrasi Blok Baru" untuk memulai'}
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -234,8 +277,8 @@ export default function BlockRegistration({ data, loading }) {
       {/* Registration Modal */}
       <Modal 
         show={showModal} 
-        onClose={() => setShowModal(false)} 
-        title="➕ Registrasi Blok untuk Aktivitas"
+        onClose={() => setShowModal(false)}
+        title="📋 Registrasi Blok untuk Aktivitas"
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Aktivitas Selection */}
@@ -255,8 +298,8 @@ export default function BlockRegistration({ data, loading }) {
           </div>
 
           {/* Execution Number (for Weeding) */}
-          {formData.activity_type_id && 
-           data.activityTypes.find(a => a.id === formData.activity_type_id)?.code === 'WEEDING' && (
+          {formData.activity_type_id &&
+            data.activityTypes.find(a => a.id === formData.activity_type_id)?.code === 'WEEDING' && (
             <div>
               <label className="block text-sm font-medium mb-2">Weeding Ke-</label>
               <select
@@ -388,7 +431,7 @@ export default function BlockRegistration({ data, loading }) {
               }}
               className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400"
             >
-              Batal
+              ❌ Batal
             </button>
           </div>
         </form>
