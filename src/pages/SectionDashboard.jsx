@@ -1,6 +1,9 @@
+// src/pages/SectionDashboard.jsx - UPDATED
+
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSupabaseData } from '../hooks/useSupabaseData';
+import Dashboard from '../components/Dashboard';
 import MasterData from '../components/MasterData';
 import BlockRegistration from '../components/BlockRegistration';
 import TransactionForm from '../components/TransactionForm';
@@ -15,14 +18,13 @@ export default function SectionDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50">
+      {/* Header */}
       <header className="bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-lg">
         <div className="container mx-auto px-4 py-6">
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-3xl font-bold">📊 VND D-One - Section Dashboard</h1>
-              <p className="text-purple-100 mt-1">
-                Monitoring Aktivitas Section: {user?.section_name || user?.section_id}
-              </p>
+              <p className="text-purple-100 mt-1">Monitoring Section {user?.section_name}</p>
             </div>
             <div className="text-right">
               <p className="text-sm text-purple-100">Selamat Datang,</p>
@@ -39,20 +41,21 @@ export default function SectionDashboard() {
         </div>
       </header>
 
+      {/* Navigation Tabs */}
       <div className="bg-white shadow-md border-b">
         <div className="container mx-auto px-4">
           <div className="flex space-x-1 overflow-x-auto">
             {[
-              { id: 'dashboard', label: '📊 Dashboard' },
-              { id: 'master', label: '💾 Master Data' },
-              { id: 'registration', label: '📋 Block Registration' },
-              { id: 'transaction', label: '➕ Input Transaksi' },
-              { id: 'history', label: '📜 History Transaksi' },
+              { id: 'dashboard', label: 'Dashboard' },
+              { id: 'history', label: 'Transaksi History' },
+              { id: 'transaction', label: 'Input Transaksi' },
+              { id: 'registration', label: 'Block Registration' },
+              { id: 'master', label: 'Master Data' },
             ].map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-6 py-4 font-medium transition-all whitespace-nowrap ${
+                className={`px-6 py-4 font-medium transition-all whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'text-purple-600 border-b-2 border-purple-600 bg-purple-50'
                     : 'text-gray-600 hover:text-purple-600 hover:bg-gray-50'
@@ -65,73 +68,13 @@ export default function SectionDashboard() {
         </div>
       </div>
 
+      {/* Content */}
       <div className="container mx-auto px-4 py-8">
-        {activeTab === 'dashboard' && (
-          <div className="bg-white rounded-lg shadow-md p-8">
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">
-              📍 Dashboard Section: {user?.section_name || user?.section_id}
-            </h2>
-            <p className="text-gray-600 mb-6">
-              Anda memiliki akses penuh untuk mengelola data di section Anda.
-            </p>
-            
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-blue-600 font-semibold">Vendors</p>
-                <p className="text-3xl font-bold text-gray-800">{data.vendors.length}</p>
-              </div>
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <p className="text-sm text-green-600 font-semibold">Blocks</p>
-                <p className="text-3xl font-bold text-gray-800">{data.blocks.length}</p>
-              </div>
-              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                <p className="text-sm text-purple-600 font-semibold">Workers</p>
-                <p className="text-3xl font-bold text-gray-800">{data.workers.length}</p>
-              </div>
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <p className="text-sm text-yellow-600 font-semibold">Transaksi</p>
-                <p className="text-3xl font-bold text-gray-800">{data.transactions.length}</p>
-              </div>
-            </div>
-
-            <div className="mt-8 p-4 bg-purple-50 border border-purple-200 rounded-lg">
-              <p className="text-purple-800 font-semibold mb-2">🔐 Access Level - {roleLabel}:</p>
-              <ul className="space-y-1 text-sm text-purple-700">
-                <li>✓ Section: {user?.section_name || user?.section_id}</li>
-                <li>✓ Full CRUD access untuk section Anda</li>
-                <li>✓ Master Data, Block Registration, Transaksi</li>
-                <li>✓ View & Manage History Transaksi</li>
-                <li>⚠️ Data section lain tidak dapat diakses</li>
-              </ul>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-4">
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-blue-800 font-semibold mb-2">📊 Your Section Activity:</p>
-                <ul className="space-y-1 text-sm text-blue-700">
-                  <li>Registered Activities: {data.blockActivities.length}</li>
-                  <li>Active Transactions: {data.transactions.length}</li>
-                  <li>Total Luasan: {data.transactions.reduce((sum, t) => sum + (parseFloat(t.total_luasan) || 0), 0).toFixed(2)} Ha</li>
-                </ul>
-              </div>
-
-              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                <p className="text-green-800 font-semibold mb-2">✅ Available Features:</p>
-                <ul className="space-y-1 text-sm text-green-700">
-                  <li>✓ Vendor & Block Management</li>
-                  <li>✓ Worker Registration</li>
-                  <li>✓ Transaction Input & History</li>
-                  <li>✓ Progress Monitoring</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'master' && <MasterData data={data} loading={data.loading} />}
-        {activeTab === 'registration' && <BlockRegistration data={data} loading={data.loading} />}
-        {activeTab === 'transaction' && <TransactionForm data={data} loading={data.loading} />}
+        {activeTab === 'dashboard' && <Dashboard data={data} loading={data.loading} />}
         {activeTab === 'history' && <TransactionHistory data={data} loading={data.loading} />}
+        {activeTab === 'transaction' && <TransactionForm data={data} loading={data.loading} />}
+        {activeTab === 'registration' && <BlockRegistration data={data} loading={data.loading} />}
+        {activeTab === 'master' && <MasterData data={data} loading={data.loading} />}
       </div>
     </div>
   );
