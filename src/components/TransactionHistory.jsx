@@ -1,26 +1,34 @@
-// src/components/TransactionHistory.jsx
-
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Modal from './Modal';
 
 export default function TransactionHistory({ data, loading }) {
   const [filters, setFilters] = useState({
+    dateFrom: '',
+    dateTo: '',
     vendor_id: '',
     activity_type_id: '',
-    periode_start: '',
-    periode_end: '',
     search: ''
   });
 
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [transactionDetails, setTransactionDetails] = useState(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
 
-  // ============================================================================
-  // FILTERED TRANSACTIONS
-  // ============================================================================
+  // Permissions check
+  const canDelete = ['admin', 'section_head', 'supervisor'].includes(data.currentUser?.role);
+  const canEdit = ['admin', 'section_head', 'supervisor'].includes(data.currentUser?.role);
+
   const filteredTransactions = useMemo(() => {
     let filtered = [...data.transactions];
+
+    if (filters.dateFrom) {
+      filtered = filtered.filter(t => t.tanggal >= filters.dateFrom);
+    }
+
+    if (filters.dateTo) {
+      filtered = filtered.filter(t => t.tanggal <= filters.dateTo);
+    }
 
     if (filters.vendor_id) {
       filtered = filtered.filter(t => t.vendor_id === filters.vendor_id);
@@ -30,36 +38,44 @@ export default function TransactionHistory({ data, loading }) {
       filtered = filtered.filter(t => t.activity_type_id === filters.activity_type_id);
     }
 
-    if (filters.periode_start && filters.periode_end) {
-      filtered = filtered.filter(t => {
-        const transDate = t.tanggal;
-        return transDate >= filters.periode_start && transDate <= filters.periode_end;
-      });
-    }
-
     if (filters.search) {
       const search = filters.search.toLowerCase();
       filtered = filtered.filter(t => 
         t.transaction_code?.toLowerCase().includes(search) ||
         t.vendors?.name?.toLowerCase().includes(search) ||
-        t.activity_types?.name?.toLowerCase().includes(search) ||
-        t.catatan?.toLowerCase().includes(search)
+        t.activity_types?.name?.toLowerCase().includes(search)
       );
     }
 
     return filtered;
   }, [data.transactions, filters]);
 
-  // ============================================================================
-  // VIEW TRANSACTION DETAIL
-  // ============================================================================
-  const viewDetail = async (transaction) => {
-    setSelectedTransaction(transaction);
-    setShowDetailModal(true);
+  const summary = useMemo(() => {
+    return {
+      totalTransactions: filteredTransactions.length,
+      totalLuasan: filteredTransactions.reduce((sum, t) => {
+        return sum + (parseFloat(t.total_luasan) || 0);
+      }, 0),
+      totalPekerja: filteredTransactions.reduce((sum, t) => {
+        return sum + (parseInt(t.jumlah_pekerja) || 0);
+      }, 0),
+      byActivity: filteredTransactions.reduce((acc, t) => {
+        const actName = t.activity_types?.name || 'Unknown';
+        if (!acc[actName]) {
+          acc[actName] = { count: 0, luasan: 0 };
+        }
+        acc[actName].count++;
+        acc[actName].luasan += parseFloat(t.total_luasan) || 0;
+        return acc;
+      }, {})
+    };
+  }, [filteredTransactions]);
 
+  const fetchTransactionDetails = async (transactionId) => {
+    setLoadingDetails(true);
     try {
-      // Fetch transaction_blocks
-      const { data: blocks, error: blocksError } = await data.supabase
+      // Fetch transaction blocks
+      const { data: blockData, error: blockError } = await data.supabase
         .from('transaction_blocks')
         .select(`
           *,
@@ -68,77 +84,86 @@ export default function TransactionHistory({ data, loading }) {
             blocks(code, name, zone)
           )
         `)
-        .eq('transaction_id', transaction.id);
+        .eq('transaction_id', transactionId);
 
-      if (blocksError) throw blocksError;
+      if (blockError) throw blockError;
 
-      // Fetch transaction_workers
-      const { data: workers, error: workersError } = await data.supabase
+      // Fetch workers if any
+      const { data: workerData, error: workerError } = await data.supabase
         .from('transaction_workers')
         .select(`
           *,
           workers(worker_code, name)
         `)
-        .eq('transaction_id', transaction.id);
+        .eq('transaction_id', transactionId);
 
-      if (workersError) throw workersError;
+      if (workerError) throw workerError;
 
       // Fetch activity-specific data
+      const transaction = data.transactions.find(t => t.id === transactionId);
       let specificData = null;
-      if (transaction.activity_types?.code === 'TANAM') {
+
+      if (transaction?.activity_types?.code === 'TANAM') {
         const { data: tanamData } = await data.supabase
           .from('transaction_tanam')
           .select('*')
-          .eq('transaction_id', transaction.id)
+          .eq('transaction_id', transactionId)
           .single();
         specificData = tanamData;
-      } else if (transaction.activity_types?.code === 'PANEN') {
+      }
+
+      if (transaction?.activity_types?.code === 'PANEN') {
         const { data: panenData } = await data.supabase
           .from('transaction_panen')
           .select('*')
-          .eq('transaction_id', transaction.id)
+          .eq('transaction_id', transactionId)
           .single();
         specificData = panenData;
-      } else if (transaction.activity_types?.code === 'WEED_CONTROL') {
-        const { data: materialsData } = await data.supabase
+      }
+
+      if (transaction?.activity_types?.code === 'WEED_CONTROL') {
+        const { data: materialData } = await data.supabase
           .from('transaction_materials')
           .select('*')
-          .eq('transaction_id', transaction.id);
-        specificData = { materials: materialsData };
+          .eq('transaction_id', transactionId);
+        specificData = materialData;
       }
 
       setTransactionDetails({
-        blocks: blocks || [],
-        workers: workers || [],
+        blocks: blockData || [],
+        workers: workerData || [],
         specificData
       });
+
     } catch (err) {
       console.error('Error fetching transaction details:', err);
       alert('Error loading details: ' + err.message);
+    } finally {
+      setLoadingDetails(false);
     }
   };
 
-  // ============================================================================
-  // DELETE TRANSACTION
-  // ============================================================================
-  const handleDelete = async (transactionId, transactionCode) => {
-    if (!confirm(`❓ Yakin hapus transaksi ${transactionCode}?\n\nSemua data terkait akan dihapus!`)) {
+  const handleViewDetails = async (transaction) => {
+    setSelectedTransaction(transaction);
+    setShowDetailModal(true);
+    await fetchTransactionDetails(transaction.id);
+  };
+
+  const handleDelete = async (transaction) => {
+    if (!canDelete) {
+      alert('❌ Anda tidak memiliki akses untuk menghapus transaksi!');
+      return;
+    }
+
+    if (!confirm(`❓ Yakin hapus transaksi ${transaction.transaction_code}?\n\nPeringatan: Ini akan menghapus semua data terkait!`)) {
       return;
     }
 
     try {
-      // Delete in order (children first)
-      await data.supabase.from('transaction_blocks').delete().eq('transaction_id', transactionId);
-      await data.supabase.from('transaction_workers').delete().eq('transaction_id', transactionId);
-      await data.supabase.from('transaction_tanam').delete().eq('transaction_id', transactionId);
-      await data.supabase.from('transaction_panen').delete().eq('transaction_id', transactionId);
-      await data.supabase.from('transaction_materials').delete().eq('transaction_id', transactionId);
-      
-      // Delete main transaction
       const { error } = await data.supabase
         .from('transactions')
         .delete()
-        .eq('id', transactionId);
+        .eq('id', transaction.id);
 
       if (error) throw error;
 
@@ -148,6 +173,16 @@ export default function TransactionHistory({ data, loading }) {
       console.error('Error deleting transaction:', err);
       alert('❌ Error: ' + err.message);
     }
+  };
+
+  const resetFilters = () => {
+    setFilters({
+      dateFrom: '',
+      dateTo: '',
+      vendor_id: '',
+      activity_type_id: '',
+      search: ''
+    });
   };
 
   if (loading) {
@@ -160,15 +195,63 @@ export default function TransactionHistory({ data, loading }) {
 
   return (
     <div className="space-y-6">
-      {/* ====================================================================== */}
-      {/* FILTERS */}
-      {/* ====================================================================== */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h3 className="text-xl font-bold text-gray-800 mb-4">🔍 Filter Transaksi</h3>
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="text-sm text-blue-600 font-semibold">Total Transaksi</p>
+          <p className="text-3xl font-bold text-gray-800">{summary.totalTransactions}</p>
+        </div>
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <p className="text-sm text-green-600 font-semibold">Total Luasan</p>
+          <p className="text-3xl font-bold text-gray-800">{summary.totalLuasan.toFixed(2)} Ha</p>
+        </div>
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+          <p className="text-sm text-purple-600 font-semibold">Total Pekerja</p>
+          <p className="text-3xl font-bold text-gray-800">{summary.totalPekerja}</p>
+        </div>
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <p className="text-sm text-yellow-600 font-semibold">Avg Workload</p>
+          <p className="text-3xl font-bold text-gray-800">
+            {summary.totalPekerja > 0 
+              ? (summary.totalLuasan / summary.totalPekerja).toFixed(3) 
+              : '0'} Ha/org
+          </p>
+        </div>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Filters */}
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-bold text-gray-800">🔍 Filter Transaksi</h3>
+          <button
+            onClick={resetFilters}
+            className="text-sm text-blue-600 hover:text-blue-800 font-semibold"
+          >
+            🔄 Reset Filter
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
           <div>
-            <label className="block text-sm font-medium mb-2">Vendor</label>
+            <label className="block text-xs font-medium mb-1">Tanggal Dari</label>
+            <input
+              type="date"
+              value={filters.dateFrom}
+              onChange={(e) => setFilters({...filters, dateFrom: e.target.value})}
+              className="w-full px-3 py-2 border rounded-lg text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">Tanggal Sampai</label>
+            <input
+              type="date"
+              value={filters.dateTo}
+              onChange={(e) => setFilters({...filters, dateTo: e.target.value})}
+              className="w-full px-3 py-2 border rounded-lg text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1">Vendor</label>
             <select
               value={filters.vendor_id}
               onChange={(e) => setFilters({...filters, vendor_id: e.target.value})}
@@ -180,9 +263,8 @@ export default function TransactionHistory({ data, loading }) {
               ))}
             </select>
           </div>
-
           <div>
-            <label className="block text-sm font-medium mb-2">Aktivitas</label>
+            <label className="block text-xs font-medium mb-1">Aktivitas</label>
             <select
               value={filters.activity_type_id}
               onChange={(e) => setFilters({...filters, activity_type_id: e.target.value})}
@@ -194,9 +276,8 @@ export default function TransactionHistory({ data, loading }) {
               ))}
             </select>
           </div>
-
           <div>
-            <label className="block text-sm font-medium mb-2">Cari</label>
+            <label className="block text-xs font-medium mb-1">Cari</label>
             <input
               type="text"
               value={filters.search}
@@ -205,285 +286,259 @@ export default function TransactionHistory({ data, loading }) {
               className="w-full px-3 py-2 border rounded-lg text-sm"
             />
           </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">Tanggal Mulai</label>
-            <input
-              type="date"
-              value={filters.periode_start}
-              onChange={(e) => setFilters({...filters, periode_start: e.target.value})}
-              className="w-full px-3 py-2 border rounded-lg text-sm"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">Tanggal Akhir</label>
-            <input
-              type="date"
-              value={filters.periode_end}
-              onChange={(e) => setFilters({...filters, periode_end: e.target.value})}
-              className="w-full px-3 py-2 border rounded-lg text-sm"
-            />
-          </div>
-
-          <div className="flex items-end">
-            <button
-              onClick={() => setFilters({
-                vendor_id: '',
-                activity_type_id: '',
-                periode_start: '',
-                periode_end: '',
-                search: ''
-              })}
-              className="w-full bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 text-sm"
-            >
-              🔄 Reset
-            </button>
-          </div>
         </div>
       </div>
 
-      {/* ====================================================================== */}
-      {/* TRANSACTION TABLE */}
-      {/* ====================================================================== */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h3 className="text-xl font-bold text-gray-800 mb-4">
-          📋 Riwayat Transaksi ({filteredTransactions.length})
-        </h3>
+      {/* Activity Summary */}
+      {Object.keys(summary.byActivity).length > 0 && (
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h3 className="text-lg font-bold text-gray-800 mb-4">📊 Ringkasan Per Aktivitas</h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            {Object.entries(summary.byActivity).map(([activity, stats]) => (
+              <div key={activity} className="bg-gray-50 border rounded-lg p-3">
+                <p className="text-xs text-gray-600 font-medium truncate">{activity}</p>
+                <p className="text-xl font-bold text-blue-600">{stats.count}x</p>
+                <p className="text-xs text-gray-500">{stats.luasan.toFixed(2)} Ha</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Transaction List */}
+      <div className="bg-white rounded-lg shadow-md overflow-hidden">
+        <div className="px-6 py-4 border-b bg-gray-50">
+          <h3 className="text-lg font-bold text-gray-800">
+            📋 Daftar Transaksi ({filteredTransactions.length})
+          </h3>
+        </div>
 
         {filteredTransactions.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
-            Belum ada transaksi
+          <div className="text-center py-12">
+            <p className="text-gray-500 text-lg">Tidak ada transaksi yang sesuai filter</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-100">
                 <tr>
-                  <th className="px-3 py-3 text-left">No</th>
-                  <th className="px-3 py-3 text-left">Tanggal</th>
-                  <th className="px-3 py-3 text-left">Kode Transaksi</th>
-                  <th className="px-3 py-3 text-left">Vendor</th>
-                  <th className="px-3 py-3 text-left">Aktivitas</th>
-                  <th className="px-3 py-3 text-right">Total Luasan</th>
-                  <th className="px-3 py-3 text-right">Pekerja</th>
-                  <th className="px-3 py-3 text-left">Kondisi</th>
-                  <th className="px-3 py-3 text-left">Aksi</th>
+                  <th className="px-4 py-3 text-left font-semibold">Tanggal</th>
+                  <th className="px-4 py-3 text-left font-semibold">Kode Transaksi</th>
+                  <th className="px-4 py-3 text-left font-semibold">Vendor</th>
+                  <th className="px-4 py-3 text-left font-semibold">Aktivitas</th>
+                  <th className="px-4 py-3 text-left font-semibold">Kondisi</th>
+                  <th className="px-4 py-3 text-right font-semibold">Luasan</th>
+                  <th className="px-4 py-3 text-right font-semibold">Pekerja</th>
+                  <th className="px-4 py-3 text-right font-semibold">Workload</th>
+                  <th className="px-4 py-3 text-center font-semibold">Aksi</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredTransactions.map((t, i) => (
-                  <tr key={t.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                    <td className="px-3 py-3">{i + 1}</td>
-                    <td className="px-3 py-3">
-                      {new Date(t.tanggal).toLocaleDateString('id-ID')}
-                    </td>
-                    <td className="px-3 py-3 font-mono text-xs font-semibold">
-                      {t.transaction_code}
-                    </td>
-                    <td className="px-3 py-3">{t.vendors?.name}</td>
-                    <td className="px-3 py-3">
-                      <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs font-semibold">
-                        {t.activity_types?.name}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3 text-right font-semibold text-blue-600">
-                      {parseFloat(t.total_luasan || 0).toFixed(2)} Ha
-                    </td>
-                    <td className="px-3 py-3 text-right">{t.jumlah_pekerja} orang</td>
-                    <td className="px-3 py-3">
-                      {t.kondisi && (
-                        <span className={`px-2 py-1 rounded text-xs font-semibold capitalize ${
-                          t.kondisi === 'ringan' ? 'bg-green-100 text-green-800' :
-                          t.kondisi === 'sedang' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-red-100 text-red-800'
-                        }`}>
-                          {t.kondisi}
+                {filteredTransactions.map((transaction, idx) => {
+                  const luasan = parseFloat(transaction.total_luasan) || 0;
+                  const pekerja = parseInt(transaction.jumlah_pekerja) || 0;
+                  const workload = pekerja > 0 ? (luasan / pekerja).toFixed(3) : '0';
+
+                  return (
+                    <tr 
+                      key={transaction.id} 
+                      className={`border-t hover:bg-gray-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
+                    >
+                      <td className="px-4 py-3">
+                        {new Date(transaction.tanggal).toLocaleDateString('id-ID')}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs font-semibold text-blue-600">
+                        {transaction.transaction_code}
+                      </td>
+                      <td className="px-4 py-3">{transaction.vendors?.name}</td>
+                      <td className="px-4 py-3">
+                        <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs font-semibold">
+                          {transaction.activity_types?.name}
                         </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-3">
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => viewDetail(t)}
-                          className="text-blue-600 hover:text-blue-800 font-semibold"
-                          title="Lihat Detail"
-                        >
-                          👁️
-                        </button>
-                        {data.currentUser?.role !== 'vendor' && (
+                      </td>
+                      <td className="px-4 py-3">
+                        {transaction.kondisi ? (
+                          <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                            transaction.kondisi === 'berat' ? 'bg-red-100 text-red-800' :
+                            transaction.kondisi === 'sedang' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-green-100 text-green-800'
+                          }`}>
+                            {transaction.kondisi}
+                          </span>
+                        ) : '-'}
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold text-blue-600">
+                        {luasan.toFixed(2)} Ha
+                      </td>
+                      <td className="px-4 py-3 text-right font-semibold">
+                        {pekerja} orang
+                      </td>
+                      <td className="px-4 py-3 text-right text-purple-600 font-semibold">
+                        {workload} Ha/org
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-2 justify-center">
                           <button
-                            onClick={() => handleDelete(t.id, t.transaction_code)}
-                            className="text-red-600 hover:text-red-800 font-semibold"
-                            title="Hapus"
+                            onClick={() => handleViewDetails(transaction)}
+                            className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-xs font-semibold"
                           >
-                            🗑️
+                            👁️ Detail
                           </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          {canDelete && (
+                            <button
+                              onClick={() => handleDelete(transaction)}
+                              className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-xs font-semibold"
+                            >
+                              🗑️
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
 
-      {/* ====================================================================== */}
-      {/* DETAIL MODAL */}
-      {/* ====================================================================== */}
+      {/* Detail Modal */}
       <Modal
         show={showDetailModal}
         onClose={() => {
           setShowDetailModal(false);
+          setSelectedTransaction(null);
           setTransactionDetails(null);
         }}
         title={`📋 Detail Transaksi: ${selectedTransaction?.transaction_code}`}
       >
-        {!transactionDetails ? (
-          <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="text-gray-600 mt-4">Loading details...</p>
+        {loadingDetails ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
           </div>
-        ) : (
+        ) : selectedTransaction && transactionDetails ? (
           <div className="space-y-4">
             {/* Basic Info */}
-            <div className="bg-gray-50 rounded-lg p-4">
-              <h4 className="font-semibold mb-3">ℹ️ Informasi Umum</h4>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <p className="text-gray-600">Tanggal:</p>
-                  <p className="font-semibold">
-                    {new Date(selectedTransaction.tanggal).toLocaleDateString('id-ID')}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-gray-600">Vendor:</p>
-                  <p className="font-semibold">{selectedTransaction.vendors?.name}</p>
-                </div>
-                <div>
-                  <p className="text-gray-600">Aktivitas:</p>
-                  <p className="font-semibold">{selectedTransaction.activity_types?.name}</p>
-                </div>
-                <div>
-                  <p className="text-gray-600">Jumlah Pekerja:</p>
-                  <p className="font-semibold">{selectedTransaction.jumlah_pekerja} orang</p>
-                </div>
-                {selectedTransaction.kondisi && (
-                  <div>
-                    <p className="text-gray-600">Kondisi:</p>
-                    <span className={`px-2 py-1 rounded text-xs font-semibold capitalize ${
-                      selectedTransaction.kondisi === 'ringan' ? 'bg-green-100 text-green-800' :
-                      selectedTransaction.kondisi === 'sedang' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-red-100 text-red-800'
-                    }`}>
-                      {selectedTransaction.kondisi}
-                    </span>
-                  </div>
-                )}
+            <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
+              <div>
+                <p className="text-xs text-gray-600">Tanggal</p>
+                <p className="font-semibold">
+                  {new Date(selectedTransaction.tanggal).toLocaleDateString('id-ID')}
+                </p>
               </div>
-              {selectedTransaction.catatan && (
-                <div className="mt-3">
-                  <p className="text-gray-600 text-sm">Catatan:</p>
-                  <p className="text-sm bg-white p-2 rounded border">{selectedTransaction.catatan}</p>
-                </div>
-              )}
+              <div>
+                <p className="text-xs text-gray-600">Vendor</p>
+                <p className="font-semibold">{selectedTransaction.vendors?.name}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-600">Aktivitas</p>
+                <p className="font-semibold">{selectedTransaction.activity_types?.name}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-600">Kondisi</p>
+                <p className="font-semibold capitalize">{selectedTransaction.kondisi || '-'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-600">Jumlah Pekerja</p>
+                <p className="font-semibold text-green-600">{selectedTransaction.jumlah_pekerja} orang</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-600">Total Luasan</p>
+                <p className="font-semibold text-blue-600">
+                  {parseFloat(selectedTransaction.total_luasan || 0).toFixed(2)} Ha
+                </p>
+              </div>
             </div>
+
+            {/* Catatan */}
+            {selectedTransaction.catatan && (
+              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p className="text-xs text-yellow-800 font-semibold mb-1">📝 Catatan:</p>
+                <p className="text-sm text-yellow-900">{selectedTransaction.catatan}</p>
+              </div>
+            )}
 
             {/* Blocks */}
             <div>
-              <h4 className="font-semibold mb-2">🗺️ Blok yang Dikerjakan</h4>
-              <div className="border rounded-lg overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-100">
-                    <tr>
-                      <th className="px-3 py-2 text-left">Blok</th>
-                      <th className="px-3 py-2 text-left">Zone</th>
-                      <th className="px-3 py-2 text-right">Luasan</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {transactionDetails.blocks.map((b, i) => (
-                      <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                        <td className="px-3 py-2 font-semibold">
-                          {b.block_activities?.blocks?.name}
-                        </td>
-                        <td className="px-3 py-2">
-                          {b.block_activities?.blocks?.zone}
-                        </td>
-                        <td className="px-3 py-2 text-right font-semibold text-blue-600">
-                          {b.luas_dikerjakan} Ha
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <h4 className="font-semibold mb-2">🗺️ Blok yang Dikerjakan ({transactionDetails.blocks.length})</h4>
+              <div className="space-y-2">
+                {transactionDetails.blocks.map((tb, idx) => (
+                  <div key={idx} className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-semibold">
+                          {tb.block_activities?.blocks?.name}
+                        </p>
+                        <p className="text-xs text-gray-600">
+                          {tb.block_activities?.blocks?.code} | Zone: {tb.block_activities?.blocks?.zone}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold text-blue-600">{tb.luas_dikerjakan} Ha</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
-            {/* Workers (if available) */}
-            {transactionDetails.workers?.length > 0 && (
+            {/* Workers */}
+            {transactionDetails.workers.length > 0 && (
               <div>
-                <h4 className="font-semibold mb-2">👷 Pekerja</h4>
-                <div className="flex flex-wrap gap-2">
-                  {transactionDetails.workers.map((w, i) => (
-                    <span key={i} className="bg-blue-100 text-blue-800 px-3 py-1 rounded text-sm">
-                      {w.workers?.name} ({w.workers?.worker_code})
-                    </span>
+                <h4 className="font-semibold mb-2">👷 Pekerja ({transactionDetails.workers.length})</h4>
+                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                  {transactionDetails.workers.map((tw, idx) => (
+                    <div key={idx} className="p-2 bg-green-50 border border-green-200 rounded text-sm">
+                      <p className="font-medium">{tw.workers?.name}</p>
+                      <p className="text-xs text-gray-600">{tw.workers?.worker_code}</p>
+                    </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Activity-Specific Data */}
-            {transactionDetails.specificData && (
-              <div className="bg-yellow-50 rounded-lg p-4">
-                <h4 className="font-semibold mb-2">📝 Data Spesifik Aktivitas</h4>
-                
-                {/* Tanam */}
-                {selectedTransaction.activity_types?.code === 'TANAM' && (
-                  <div className="text-sm">
-                    <p className="text-gray-600">Varietas:</p>
-                    <p className="font-semibold">{transactionDetails.specificData.varietas}</p>
-                  </div>
-                )}
+            {/* Activity Specific Data */}
+            {selectedTransaction.activity_types?.code === 'TANAM' && transactionDetails.specificData && (
+              <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                <p className="text-xs text-purple-600 font-semibold mb-1">🌱 Data Tanam:</p>
+                <p className="text-sm"><strong>Varietas:</strong> {transactionDetails.specificData.varietas}</p>
+              </div>
+            )}
 
-                {/* Panen */}
-                {selectedTransaction.activity_types?.code === 'PANEN' && (
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <p className="text-gray-600">Estimasi Ton:</p>
-                      <p className="font-semibold">{transactionDetails.specificData.estimasi_ton} ton</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-600">Actual Ton:</p>
-                      <p className="font-semibold">
-                        {transactionDetails.specificData.actual_ton || '-'} ton
+            {selectedTransaction.activity_types?.code === 'PANEN' && transactionDetails.specificData && (
+              <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                <p className="text-xs text-orange-600 font-semibold mb-2">🚜 Data Panen:</p>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <p className="text-gray-600">Estimasi Ton:</p>
+                    <p className="font-semibold">{transactionDetails.specificData.estimasi_ton || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-600">Actual Ton:</p>
+                    <p className="font-semibold">{transactionDetails.specificData.actual_ton || '-'}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {selectedTransaction.activity_types?.code === 'WEED_CONTROL' && transactionDetails.specificData?.length > 0 && (
+              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-xs text-green-600 font-semibold mb-2">🧪 Material Herbisida:</p>
+                <div className="space-y-2">
+                  {transactionDetails.specificData.map((mat, idx) => (
+                    <div key={idx} className="text-sm bg-white p-2 rounded">
+                      <p><strong>{mat.material_name}</strong></p>
+                      <p className="text-xs text-gray-600">
+                        Dosis: {mat.dosis_per_ha} L/Ha × {mat.luasan_aplikasi} Ha = {(mat.dosis_per_ha * mat.luasan_aplikasi).toFixed(2)} L
                       </p>
                     </div>
-                  </div>
-                )}
-
-                {/* Weed Control */}
-                {selectedTransaction.activity_types?.code === 'WEED_CONTROL' && (
-                  <div>
-                    <p className="text-sm font-semibold mb-2">Material Herbisida:</p>
-                    {transactionDetails.specificData.materials?.map((m, i) => (
-                      <div key={i} className="text-sm bg-white p-2 rounded border mb-2">
-                        <span className="font-semibold">{m.material_name}</span>
-                        {' - '}
-                        {m.dosis_per_ha} L/Ha
-                        {' (Total: '}
-                        {(m.dosis_per_ha * m.luasan_aplikasi).toFixed(2)} L)
-                      </div>
-                    ))}
-                  </div>
-                )}
+                  ))}
+                </div>
               </div>
             )}
           </div>
-        )}
+        ) : null}
       </Modal>
     </div>
   );
