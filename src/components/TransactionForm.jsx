@@ -727,9 +727,157 @@ export default function TransactionForm({ data, loading }) {
                     type="number"
                     min="1"
                     value={formData.jumlahPekerja}
-                    onChange={(e) => setFormData({...formData, jumlahPekerja: e.target.value})}
+                      onChange={(e) => setFormData({...formData, jumlahPekerja: e.target.value})}
                     className="w-full px-4 py-2 border rounded-lg"
                     placeholder="Contoh: 25"
                     required
                   />
                 </div>
+              )}
+
+              {/* List Mode */}
+              {formData.workerMode === 'list' && (
+                <div>
+                  {availableWorkers.length === 0 ? (
+                    <div className="text-center py-8 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <p className="text-yellow-800">
+                        Vendor ini belum memiliki pekerja terdaftar.
+                        <br/>
+                        <span className="text-sm">Tambahkan pekerja di tab "Master Data" terlebih dahulu.</span>
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <div className="flex justify-between items-center">
+                          <span className="font-semibold">Pekerja Dipilih:</span>
+                          <span className="text-2xl font-bold text-green-600">
+                            {formData.selectedWorkers.length} orang
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-64 overflow-y-auto p-3 bg-gray-50 rounded-lg border">
+                        {availableWorkers.map(worker => (
+                          <label
+                            key={worker.id}
+                            className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-all ${
+                              formData.selectedWorkers.includes(worker.id)
+                                ? 'bg-blue-100 border-2 border-blue-500'
+                                : 'bg-white border-2 border-gray-200 hover:border-blue-300'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={formData.selectedWorkers.includes(worker.id)}
+                              onChange={() => toggleWorker(worker.id)}
+                              className="w-4 h-4"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-sm truncate">{worker.name}</p>
+                              <p className="text-xs text-gray-500">{worker.worker_code}</p>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Total Pekerja Display */}
+              <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                <div className="flex justify-between items-center">
+                  <span className="font-semibold">Total Pekerja:</span>
+                  <span className="text-2xl font-bold text-purple-600">
+                    {totalPekerja} orang
+                  </span>
+                </div>
+                {totalLuasan > 0 && totalPekerja > 0 && (
+                  <div className="text-sm text-purple-700 mt-2">
+                    📊 Workload: {(totalLuasan / totalPekerja).toFixed(3)} Ha/pekerja
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Catatan */}
+          <div>
+            <label className="block text-sm font-medium mb-2">Catatan (Opsional)</label>
+            <textarea
+              value={formData.catatan}
+              onChange={(e) => setFormData({...formData, catatan: e.target.value})}
+              className="w-full px-4 py-2 border rounded-lg"
+              rows={3}
+              placeholder="Catatan tambahan tentang transaksi ini..."
+            />
+          </div>
+
+          {/* Summary */}
+          {formData.selectedBlocks.length > 0 && totalPekerja > 0 && (
+            <div className="bg-gradient-to-r from-blue-50 to-green-50 border-2 border-blue-200 rounded-lg p-4">
+              <h4 className="font-semibold mb-3">📋 Ringkasan Transaksi</h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <p className="text-gray-600">Aktivitas:</p>
+                  <p className="font-semibold">{selectedActivity?.name}</p>
+                </div>
+                <div>
+                  <p className="text-gray-600">Total Blok:</p>
+                  <p className="font-semibold">{formData.selectedBlocks.length}</p>
+                </div>
+                <div>
+                  <p className="text-gray-600">Total Luasan:</p>
+                  <p className="font-semibold text-blue-600">{totalLuasan.toFixed(2)} Ha</p>
+                </div>
+                <div>
+                  <p className="text-gray-600">Total Pekerja:</p>
+                  <p className="font-semibold text-green-600">{totalPekerja} orang</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Submit Button */}
+          <div className="flex gap-3 pt-4 border-t">
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={formData.selectedBlocks.length === 0 || totalPekerja === 0}
+              className="flex-1 bg-gradient-to-r from-blue-600 to-green-600 text-white py-3 px-6 rounded-lg font-semibold hover:from-blue-700 hover:to-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg"
+            >
+              💾 Simpan Transaksi
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm('❓ Reset form? Semua data akan hilang.')) {
+                  setFormData({
+                    tanggal: new Date().toISOString().split('T')[0],
+                    vendor_id: '',
+                    activity_type_id: '',
+                    execution_number: 1,
+                    kondisi: '',
+                    selectedBlocks: [],
+                    workerMode: 'manual',
+                    jumlahPekerja: '',
+                    selectedWorkers: [],
+                    estimasi_ton: '',
+                    actual_ton: '',
+                    varietas_override: '',
+                    materials: [],
+                    catatan: ''
+                  });
+                }
+              }}
+              className="px-6 bg-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-400"
+            >
+              🔄 Reset
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
