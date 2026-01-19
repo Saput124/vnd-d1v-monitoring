@@ -45,23 +45,22 @@ export default function AdminDashboard() {
         <div className="container mx-auto px-4">
           <div className="flex space-x-1 overflow-x-auto">
             {[
-              { id: 'dashboard', label: '📊 Dashboard', icon: '📊' },
-              { id: 'history', label: '📋 Transaksi History', icon: '📋' },
-              { id: 'transaction', label: '➕ Input Transaksi', icon: '➕' },
-              { id: 'registration', label: '📝 Block Registration', icon: '📝' },
-              { id: 'master', label: '💾 Master Data', icon: '💾' },
-              { id: 'users', label: '👥 User Management', icon: '👥' },
+              { id: 'dashboard', label: 'Dashboard' },
+              { id: 'history', label: 'Transaksi History' },
+              { id: 'transaction', label: 'Input Transaksi' },
+              { id: 'registration', label: 'Block Registration' },
+              { id: 'master', label: 'Master Data' },
+              { id: 'users', label: 'User Management' },
             ].map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-6 py-4 font-medium transition-all whitespace-nowrap ${
+                className={`px-6 py-4 font-medium transition-all whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
                     : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'
                 }`}
               >
-                <span className="text-xl">{tab.icon}</span>
                 {tab.label}
               </button>
             ))}
