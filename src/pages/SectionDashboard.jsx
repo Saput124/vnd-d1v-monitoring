@@ -46,16 +46,16 @@ export default function SectionDashboard() {
         <div className="container mx-auto px-4">
           <div className="flex space-x-1 overflow-x-auto">
             {[
-              { id: 'dashboard', label: '📊 Dashboard' },
-              { id: 'history', label: '📋 Transaksi History' },
-              { id: 'transaction', label: '➕ Input Transaksi' },
-              { id: 'registration', label: '📝 Block Registration' },
-              { id: 'master', label: '💾 Master Data' },
+              { id: 'dashboard', label: 'Dashboard' },
+              { id: 'history', label: 'Transaksi History' },
+              { id: 'transaction', label: 'Input Transaksi' },
+              { id: 'registration', label: 'Block Registration' },
+              { id: 'master', label: 'Master Data' },
             ].map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-6 py-4 font-medium transition-all whitespace-nowrap ${
+                className={`px-6 py-4 font-medium transition-all whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'text-purple-600 border-b-2 border-purple-600 bg-purple-50'
                     : 'text-gray-600 hover:text-purple-600 hover:bg-gray-50'
