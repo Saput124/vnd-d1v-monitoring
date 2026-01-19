@@ -1,14 +1,16 @@
-//src/pages/AdminDashboard.jsx - FIXED WITH ACTIVITY MANAGEMENT TAB
+// src/pages/AdminDashboard.jsx - FIXED VERSION
+// Tambahkan tab "Activity Management" dan "Section Activities"
 
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSupabaseData } from '../hooks/useSupabaseData';
 import Dashboard from '../components/Dashboard';
 import MasterData from '../components/MasterData';
-import ActivityManagement from '../components/ActivityManagement';
 import BlockRegistration from '../components/BlockRegistration';
 import TransactionForm from '../components/TransactionForm';
 import TransactionHistory from '../components/TransactionHistory';
+import ActivityManagement from '../components/ActivityManagement';
+import SectionActivityManagement from '../components/SectionActivityManagement';
 import UserManagement from '../components/UserManagement';
 
 export default function AdminDashboard() {
@@ -23,13 +25,13 @@ export default function AdminDashboard() {
         <div className="container mx-auto px-4 py-6">
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-3xl font-bold">📊 VND D-One - Divisi D1V</h1>
+              <h1 className="text-3xl font-bold">🌱 VND D-One - Divisi D1V</h1>
               <p className="text-green-100 mt-1">Monitoring Aktivitas Perkebunan</p>
             </div>
             <div className="text-right">
               <p className="text-sm text-green-100">Selamat Datang,</p>
               <p className="font-semibold">{user?.full_name}</p>
-              <p className="text-xs text-green-200">Role: {user?.role}</p>
+              <p className="text-xs text-green-200">Role: Admin</p>
               <button
                 onClick={logout}
                 className="mt-2 bg-red-500 hover:bg-red-600 px-4 py-1 rounded text-sm"
@@ -41,25 +43,26 @@ export default function AdminDashboard() {
         </div>
       </header>
 
-      {/* Navigation Tabs */}
+      {/* Navigation Tabs - UPDATED */}
       <div className="bg-white shadow-md border-b">
         <div className="container mx-auto px-4">
           <div className="flex space-x-1 overflow-x-auto">
             {[
-              { id: 'dashboard', label: '📊 Dashboard' },
-              { id: 'history', label: '📋 History' },
-              { id: 'transaction', label: '➕ Input Transaksi' },
-              { id: 'registration', label: '🗺️ Block Registration' },
-              { id: 'activities', label: '🏷️ Activity Types' },
-              { id: 'master', label: '📦 Master Data' },
-              { id: 'users', label: '👥 Users' },
+              { id: 'dashboard', label: '📊 Dashboard', color: 'blue' },
+              { id: 'history', label: '📜 Transaksi History', color: 'purple' },
+              { id: 'transaction', label: '➕ Input Transaksi', color: 'green' },
+              { id: 'registration', label: '📋 Block Registration', color: 'yellow' },
+              { id: 'activities', label: '🎯 Activity Management', color: 'pink' },
+              { id: 'section_activities', label: '🔗 Section Activities', color: 'indigo' },
+              { id: 'master', label: '🗂️ Master Data', color: 'cyan' },
+              { id: 'users', label: '👥 User Management', color: 'red' },
             ].map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`px-6 py-4 font-medium transition-all whitespace-nowrap ${
                   activeTab === tab.id
-                    ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50'
+                    ? `text-${tab.color}-600 border-b-2 border-${tab.color}-600 bg-${tab.color}-50`
                     : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'
                 }`}
               >
@@ -77,9 +80,24 @@ export default function AdminDashboard() {
         {activeTab === 'transaction' && <TransactionForm data={data} loading={data.loading} />}
         {activeTab === 'registration' && <BlockRegistration data={data} loading={data.loading} />}
         {activeTab === 'activities' && <ActivityManagement data={data} loading={data.loading} />}
+        {activeTab === 'section_activities' && <SectionActivityManagement />}
         {activeTab === 'master' && <MasterData data={data} loading={data.loading} />}
         {activeTab === 'users' && <UserManagement />}
       </div>
+
+      {/* Footer Info */}
+      <footer className="bg-white border-t mt-12 py-6">
+        <div className="container mx-auto px-4 text-center text-sm text-gray-600">
+          <p>
+            <strong>ℹ️ Important:</strong> Pastikan Anda sudah:
+          </p>
+          <ol className="mt-2 space-y-1 text-xs">
+            <li>1️⃣ Tambahkan <strong>Activity Types</strong> di "Activity Management"</li>
+            <li>2️⃣ Assign activities ke sections di <strong>"Section Activities"</strong></li>
+            <li>3️⃣ Baru bisa registrasi blok & input transaksi</li>
+          </ol>
+        </div>
+      </footer>
     </div>
   );
 }
