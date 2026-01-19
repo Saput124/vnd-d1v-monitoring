@@ -1,5 +1,3 @@
-// src/components/TransactionForm.jsx - FIXED VERSION
-
 import { useState, useMemo, useEffect } from 'react';
   
 export default function TransactionForm({ data, loading }) {
@@ -26,7 +24,7 @@ export default function TransactionForm({ data, loading }) {
     search: ''
   });
 
-  // 🆕 AUTO-FILL vendor_id jika user role = vendor
+  // 🔥 AUTO-FILL VENDOR for vendor role
   useEffect(() => {
     if (data.currentUser?.role === 'vendor' && data.currentUser?.vendor_id) {
       setFormData(prev => ({
@@ -36,12 +34,10 @@ export default function TransactionForm({ data, loading }) {
     }
   }, [data.currentUser]);
 
-  // Get selected activity
   const selectedActivity = useMemo(() => {
     return data.activityTypes.find(a => a.id === formData.activity_type_id);
   }, [formData.activity_type_id, data.activityTypes]);
 
-  // 🔧 FILTER: Only show blocks for current section (if not admin)
   const availableBlocks = useMemo(() => {
     if (!formData.activity_type_id) return [];
 
@@ -51,18 +47,6 @@ export default function TransactionForm({ data, loading }) {
       ba.status !== 'cancelled'
     );
 
-    // 🔒 DATA ISOLATION: Filter by section for non-admin
-    if (data.currentUser?.role !== 'admin' && data.currentUser?.section_id) {
-      filtered = filtered.filter(ba => ba.section_id === data.currentUser.section_id);
-    }
-
-    // 🔒 VENDOR ISOLATION: Vendor hanya bisa lihat blok di section mereka
-    if (data.currentUser?.role === 'vendor' && data.currentUser?.vendor_sections?.length > 0) {
-      const vendorSectionIds = data.currentUser.vendor_sections.map(s => s.id);
-      filtered = filtered.filter(ba => vendorSectionIds.includes(ba.section_id));
-    }
-
-    // Apply UI filters
     if (blockFilters.zone) {
       filtered = filtered.filter(ba => {
         const block = data.blocks.find(b => b.id === ba.block_id);
@@ -93,27 +77,16 @@ export default function TransactionForm({ data, loading }) {
         block_luas_total: block?.luas_total
       };
     });
-  }, [formData.activity_type_id, data.blockActivities, data.blocks, blockFilters, data.currentUser]);
+  }, [formData.activity_type_id, formData.execution_number, data.blockActivities, data.blocks, blockFilters]);
 
-  // 🔧 FILTER: Workers by vendor + section access
   const availableWorkers = useMemo(() => {
     if (!formData.vendor_id) return [];
-    
-    let workers = data.workers.filter(w => w.vendor_id === formData.vendor_id);
-    
-    // 🔒 Vendor hanya lihat workers mereka sendiri
-    if (data.currentUser?.role === 'vendor' && data.currentUser?.vendor_id) {
-      workers = workers.filter(w => w.vendor_id === data.currentUser.vendor_id);
-    }
-    
-    return workers;
-  }, [formData.vendor_id, data.workers, data.currentUser]);
+    return data.workers.filter(w => w.vendor_id === formData.vendor_id);
+  }, [formData.vendor_id, data.workers]);
 
-  // Unique zones & categories (filtered by access)
-  const uniqueZones = [...new Set(availableBlocks.map(b => b.block_zone).filter(Boolean))];
-  const uniqueKategori = [...new Set(availableBlocks.map(b => b.kategori).filter(Boolean))];
+  const uniqueZones = [...new Set(data.blocks.map(b => b.zone))];
+  const uniqueKategori = [...new Set(data.blocks.map(b => b.kategori).filter(Boolean))];
 
-  // Toggle block selection
   const toggleBlock = (blockActivityId) => {
     const exists = formData.selectedBlocks.find(b => b.id === blockActivityId);
     if (exists) {
@@ -129,7 +102,6 @@ export default function TransactionForm({ data, loading }) {
     }
   };
 
-  // Update block luasan
   const updateBlockLuasan = (blockActivityId, luasan) => {
     setFormData(prev => ({
       ...prev,
@@ -139,7 +111,6 @@ export default function TransactionForm({ data, loading }) {
     }));
   };
 
-  // Toggle worker
   const toggleWorker = (workerId) => {
     setFormData(prev => ({
       ...prev,
@@ -149,7 +120,6 @@ export default function TransactionForm({ data, loading }) {
     }));
   };
 
-  // Add material
   const addMaterial = () => {
     setFormData(prev => ({
       ...prev,
@@ -157,7 +127,6 @@ export default function TransactionForm({ data, loading }) {
     }));
   };
 
-  // Update material
   const updateMaterial = (index, field, value) => {
     setFormData(prev => ({
       ...prev,
@@ -167,7 +136,6 @@ export default function TransactionForm({ data, loading }) {
     }));
   };
 
-  // Remove material
   const removeMaterial = (index) => {
     setFormData(prev => ({
       ...prev,
@@ -175,12 +143,10 @@ export default function TransactionForm({ data, loading }) {
     }));
   };
 
-  // Calculate total luasan
   const totalLuasan = useMemo(() => {
     return formData.selectedBlocks.reduce((sum, b) => sum + (parseFloat(b.luasan) || 0), 0);
   }, [formData.selectedBlocks]);
 
-  // Calculate total pekerja
   const totalPekerja = useMemo(() => {
     if (formData.workerMode === 'manual') {
       return parseInt(formData.jumlahPekerja) || 0;
@@ -188,9 +154,7 @@ export default function TransactionForm({ data, loading }) {
     return formData.selectedWorkers.length;
   }, [formData.workerMode, formData.jumlahPekerja, formData.selectedWorkers]);
 
-  // Handle submit
   const handleSubmit = async () => {
-    // Validation
     if (!formData.vendor_id) {
       alert('❌ Pilih vendor!');
       return;
@@ -204,7 +168,6 @@ export default function TransactionForm({ data, loading }) {
       return;
     }
 
-    // Validate luasan
     for (const sb of formData.selectedBlocks) {
       if (!sb.luasan || parseFloat(sb.luasan) <= 0) {
         alert('❌ Isi luasan untuk semua blok yang dipilih!');
@@ -217,13 +180,11 @@ export default function TransactionForm({ data, loading }) {
       }
     }
 
-    // Validate pekerja
     if (totalPekerja === 0) {
       alert('❌ Input jumlah pekerja atau pilih dari daftar!');
       return;
     }
 
-    // Conditional validations
     if (selectedActivity?.code === 'KELENTEK' || 
         selectedActivity?.code === 'WEEDING' || 
         selectedActivity?.code === 'WEED_CONTROL') {
@@ -252,7 +213,6 @@ export default function TransactionForm({ data, loading }) {
     }
 
     try {
-      // 1. Insert transaction
       const transCode = `TRX-${Date.now()}`;
       const { data: transData, error: transError } = await data.supabase
         .from('transactions')
@@ -271,7 +231,6 @@ export default function TransactionForm({ data, loading }) {
 
       if (transError) throw transError;
 
-      // 2. Insert transaction_blocks
       const blockInserts = formData.selectedBlocks.map(sb => ({
         transaction_id: transData.id,
         block_activity_id: sb.id,
@@ -284,7 +243,6 @@ export default function TransactionForm({ data, loading }) {
 
       if (blocksError) throw blocksError;
 
-      // 3. Insert transaction_workers (if using list mode)
       if (formData.workerMode === 'list' && formData.selectedWorkers.length > 0) {
         const workerInserts = formData.selectedWorkers.map(wid => ({
           transaction_id: transData.id,
@@ -298,7 +256,6 @@ export default function TransactionForm({ data, loading }) {
         if (workersError) throw workersError;
       }
 
-      // 4. Activity-specific inserts
       if (selectedActivity?.code === 'TANAM') {
         const { error: tanamError } = await data.supabase
           .from('transaction_tanam')
@@ -337,10 +294,8 @@ export default function TransactionForm({ data, loading }) {
         if (materialsError) throw materialsError;
       }
 
-      // Success!
       alert(`✅ Transaksi berhasil disimpan!\n\nKode: ${transCode}\nTotal Luasan: ${totalLuasan.toFixed(2)} Ha\nPekerja: ${totalPekerja} orang`);
 
-      // Reset form
       setFormData({
         tanggal: new Date().toISOString().split('T')[0],
         vendor_id: data.currentUser?.role === 'vendor' ? data.currentUser.vendor_id : '',
@@ -358,7 +313,6 @@ export default function TransactionForm({ data, loading }) {
         catatan: ''
       });
 
-      // Refresh data
       await data.fetchAllData();
 
     } catch (err) {
@@ -383,7 +337,6 @@ export default function TransactionForm({ data, loading }) {
         </h2>
 
         <div className="space-y-6">
-          {/* Basic Info */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium mb-2">Tanggal *</label>
@@ -399,15 +352,13 @@ export default function TransactionForm({ data, loading }) {
             <div>
               <label className="block text-sm font-medium mb-2">Vendor *</label>
               {data.currentUser?.role === 'vendor' ? (
-                // 🔒 Vendor role: auto-fill, tidak bisa pilih vendor lain
                 <input
                   type="text"
-                  value={data.currentUser?.vendor_name || 'Loading...'}
+                  value={data.vendors.find(v => v.id === data.currentUser?.vendor_id)?.name || 'Loading...'}
                   className="w-full px-4 py-2 border rounded-lg bg-gray-100"
                   disabled
                 />
               ) : (
-                // Admin/Supervisor: bisa pilih vendor
                 <select
                   value={formData.vendor_id}
                   onChange={(e) => setFormData({
@@ -451,7 +402,6 @@ export default function TransactionForm({ data, loading }) {
             </div>
           </div>
 
-          {/* Conditional: Weeding Execution Number */}
           {selectedActivity?.code === 'WEEDING' && (
             <div>
               <label className="block text-sm font-medium mb-2">Weeding Ke- *</label>
@@ -472,7 +422,6 @@ export default function TransactionForm({ data, loading }) {
             </div>
           )}
 
-          {/* Conditional: Kondisi */}
           {(selectedActivity?.code === 'KELENTEK' || 
             selectedActivity?.code === 'WEEDING' || 
             selectedActivity?.code === 'WEED_CONTROL') && (
@@ -495,12 +444,10 @@ export default function TransactionForm({ data, loading }) {
             </div>
           )}
 
-          {/* Multi-Block Selection */}
           {formData.activity_type_id && (
             <div className="border-t pt-6">
               <h3 className="font-semibold text-lg mb-4">🗺️ Pilih Blok (Multiple)</h3>
 
-              {/* Filters */}
               <div className="grid grid-cols-3 gap-3 mb-4">
                 <div>
                   <label className="block text-xs font-medium mb-1">Filter Zone</label>
@@ -541,12 +488,7 @@ export default function TransactionForm({ data, loading }) {
                   <p className="text-yellow-800">
                     Tidak ada blok tersedia untuk aktivitas ini.
                     <br/>
-                    <span className="text-sm">
-                      {data.currentUser?.role === 'vendor' 
-                        ? 'Hubungi admin untuk registrasi blok di section Anda.'
-                        : 'Registrasi blok terlebih dahulu di tab "Block Registration"'
-                      }
-                    </span>
+                    <span className="text-sm">Registrasi blok terlebih dahulu di tab "Block Registration"</span>
                   </p>
                 </div>
               ) : (
@@ -630,7 +572,6 @@ export default function TransactionForm({ data, loading }) {
             </div>
           )}
 
-          {/* Conditional: Tanam Varietas Override */}
           {selectedActivity?.code === 'TANAM' && formData.selectedBlocks.length > 0 && (
             <div>
               <label className="block text-sm font-medium mb-2">
@@ -646,7 +587,6 @@ export default function TransactionForm({ data, loading }) {
             </div>
           )}
 
-          {/* Conditional: Panen Tonnage */}
           {selectedActivity?.code === 'PANEN' && (
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -675,7 +615,6 @@ export default function TransactionForm({ data, loading }) {
             </div>
           )}
 
-          {/* Conditional: Weed Control Materials */}
           {selectedActivity?.code === 'WEED_CONTROL' && (
             <div className="border-t pt-6">
               <div className="flex justify-between items-center mb-4">
@@ -751,12 +690,10 @@ export default function TransactionForm({ data, loading }) {
             </div>
           )}
 
-          {/* Pekerja Section */}
           {formData.vendor_id && (
             <div className="border-t pt-6">
               <h3 className="font-semibold text-lg mb-4">👷 Data Pekerja</h3>
 
-              {/* Mode Selection */}
               <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                 <label className="block text-sm font-medium mb-2">Pilih Mode Input:</label>
                 <div className="flex gap-4">
@@ -783,7 +720,6 @@ export default function TransactionForm({ data, loading }) {
                 </div>
               </div>
 
-              {/* Manual Mode */}
               {formData.workerMode === 'manual' && (
                 <div>
                   <label className="block text-sm font-medium mb-2">Jumlah Pekerja *</label>
@@ -797,151 +733,3 @@ export default function TransactionForm({ data, loading }) {
                     required
                   />
                 </div>
-              )}
-
-              {/* List Mode */}
-              {formData.workerMode === 'list' && (
-                <div>
-                  {availableWorkers.length === 0 ? (
-                    <div className="text-center py-8 bg-yellow-50 border border-yellow-200 rounded-lg">
-                      <p className="text-yellow-800">
-                        Vendor ini belum memiliki pekerja terdaftar.
-                        <br/>
-                        <span className="text-sm">Tambahkan pekerja di tab "Master Data" terlebih dahulu.</span>
-                      </p>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-                        <div className="flex justify-between items-center">
-                          <span className="font-semibold">Pekerja Dipilih:</span>
-                          <span className="text-2xl font-bold text-green-600">
-                            {formData.selectedWorkers.length} orang
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-64 overflow-y-auto p-3 bg-gray-50 rounded-lg border">
-                        {availableWorkers.map(worker => (
-                          <label
-                            key={worker.id}
-                            className={`flex items-center gap-2 p-2 rounded cursor-pointer transition-all ${
-                              formData.selectedWorkers.includes(worker.id)
-                                ? 'bg-blue-100 border-2 border-blue-500'
-                                : 'bg-white border-2 border-gray-200 hover:border-blue-300'
-                            }`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={formData.selectedWorkers.includes(worker.id)}
-                              onChange={() => toggleWorker(worker.id)}
-                              className="w-4 h-4"
-                            />
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium text-sm truncate">{worker.name}</p>
-                              <p className="text-xs text-gray-500">{worker.worker_code}</p>
-                            </div>
-                          </label>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-
-              {/* Total Pekerja Display */}
-              <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-                <div className="flex justify-between items-center">
-                  <span className="font-semibold">Total Pekerja:</span>
-                  <span className="text-2xl font-bold text-purple-600">
-                    {totalPekerja} orang
-                  </span>
-                </div>
-                {totalLuasan > 0 && totalPekerja > 0 && (
-                  <div className="text-sm text-purple-700 mt-2">
-                    📊 Workload: {(totalLuasan / totalPekerja).toFixed(3)} Ha/pekerja
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Catatan */}
-          <div>
-            <label className="block text-sm font-medium mb-2">Catatan (Opsional)</label>
-            <textarea
-              value={formData.catatan}
-              onChange={(e) => setFormData({...formData, catatan: e.target.value})}
-              className="w-full px-4 py-2 border rounded-lg"
-              rows={3}
-              placeholder="Catatan tambahan tentang transaksi ini..."
-            />
-          </div>
-
-          {/* Summary */}
-          {formData.selectedBlocks.length > 0 && totalPekerja > 0 && (
-            <div className="bg-gradient-to-r from-blue-50 to-green-50 border-2 border-blue-200 rounded-lg p-4">
-              <h4 className="font-semibold mb-3">📋 Ringkasan Transaksi</h4>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                <div>
-                  <p className="text-gray-600">Aktivitas:</p>
-                  <p className="font-semibold">{selectedActivity?.name}</p>
-                </div>
-                <div>
-                  <p className="text-gray-600">Total Blok:</p>
-                  <p className="font-semibold">{formData.selectedBlocks.length}</p>
-                </div>
-                <div>
-                  <p className="text-gray-600">Total Luasan:</p>
-                  <p className="font-semibold text-blue-600">{totalLuasan.toFixed(2)} Ha</p>
-                </div>
-                <div>
-                  <p className="text-gray-600">Total Pekerja:</p>
-                  <p className="font-semibold text-green-600">{totalPekerja} orang</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Submit Button */}
-          <div className="flex gap-3 pt-4 border-t">
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={formData.selectedBlocks.length === 0 || totalPekerja === 0}
-              className="flex-1 bg-gradient-to-r from-blue-600 to-green-600 text-white py-3 px-6 rounded-lg font-semibold hover:from-blue-700 hover:to-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg"
-            >
-              💾 Simpan Transaksi
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (confirm('❓ Reset form? Semua data akan hilang.')) {
-                  setFormData({
-                    tanggal: new Date().toISOString().split('T')[0],
-                    vendor_id: '',
-                    activity_type_id: '',
-                    execution_number: 1,
-                    kondisi: '',
-                    selectedBlocks: [],
-                    workerMode: 'manual',
-                    jumlahPekerja: '',
-                    selectedWorkers: [],
-                    estimasi_ton: '',
-                    actual_ton: '',
-                    varietas_override: '',
-                    materials: [],
-                    catatan: ''
-                  });
-                }
-              }}
-              className="px-6 bg-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-400"
-            >
-              🔄 Reset
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
