@@ -1,4 +1,5 @@
 // src/pages/AdminDashboard.jsx - FIXED VERSION
+// Tambahkan tab "Activity Management" dan "Section Activities"
 
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
@@ -8,6 +9,7 @@ import MasterData from '../components/MasterData';
 import BlockRegistration from '../components/BlockRegistration';
 import TransactionForm from '../components/TransactionForm';
 import TransactionHistory from '../components/TransactionHistory';
+import ActivityManagement from '../components/ActivityManagement';
 import SectionActivityManagement from '../components/SectionActivityManagement';
 import UserManagement from '../components/UserManagement';
 
@@ -50,6 +52,7 @@ export default function AdminDashboard() {
               { id: 'history', label: '📜 Transaksi History', color: 'purple' },
               { id: 'transaction', label: '➕ Input Transaksi', color: 'green' },
               { id: 'registration', label: '📋 Block Registration', color: 'yellow' },
+              { id: 'activities', label: '🎯 Activity Management', color: 'pink' },
               { id: 'section_activities', label: '🔗 Section Activities', color: 'indigo' },
               { id: 'master', label: '🗂️ Master Data', color: 'cyan' },
               { id: 'users', label: '👥 User Management', color: 'red' },
@@ -76,6 +79,7 @@ export default function AdminDashboard() {
         {activeTab === 'history' && <TransactionHistory data={data} loading={data.loading} />}
         {activeTab === 'transaction' && <TransactionForm data={data} loading={data.loading} />}
         {activeTab === 'registration' && <BlockRegistration data={data} loading={data.loading} />}
+        {activeTab === 'activities' && <ActivityManagement data={data} loading={data.loading} />}
         {activeTab === 'section_activities' && <SectionActivityManagement />}
         {activeTab === 'master' && <MasterData data={data} loading={data.loading} />}
         {activeTab === 'users' && <UserManagement />}
@@ -88,6 +92,7 @@ export default function AdminDashboard() {
             <strong>ℹ️ Important:</strong> Pastikan Anda sudah:
           </p>
           <ol className="mt-2 space-y-1 text-xs">
+            <li>1️⃣ Tambahkan <strong>Activity Types</strong> di "Activity Management"</li>
             <li>2️⃣ Assign activities ke sections di <strong>"Section Activities"</strong></li>
             <li>3️⃣ Baru bisa registrasi blok & input transaksi</li>
           </ol>
