@@ -1,344 +1,211 @@
-// src/hooks/useSupabaseData.jsx - PRODUCTION VERSION
-// Version with PROPER FILTERS for section isolation
+// src/hooks/useSupabaseData.js - UPDATED WITH SECTION FILTERING
 
 import { useState, useEffect } from 'react';
 import { supabase } from '../utils/supabase';
 import { getCurrentUser } from '../utils/supabase';
 
 export function useSupabaseData() {
-  const [loading, setLoading] = useState(false);
-  const [vendors, setVendors] = useState([]);
-  const [blocks, setBlocks] = useState([]);
-  const [workers, setWorkers] = useState([]);
-  const [activityTypes, setActivityTypes] = useState([]);
-  const [blockActivities, setBlockActivities] = useState([]);
-  const [transactions, setTransactions] = useState([]);
+  const [data, setData] = useState({
+    blocks: [],
+    activityTypes: [],
+    blockActivities: [],
+    transactions: [],
+    vendors: [],
+    sections: [],
+    workers: [],
+    loading: true
+  });
 
   const currentUser = getCurrentUser();
 
   const fetchAllData = async () => {
-    setLoading(true);
     try {
-      const isAdmin = currentUser?.role === 'admin';
-      const isSectionStaff = ['section_head', 'supervisor'].includes(currentUser?.role);
-      const isVendor = currentUser?.role === 'vendor';
+      setData(prev => ({ ...prev, loading: true }));
 
-      console.log('🔍 Fetching data for:', {
-        username: currentUser?.username,
-        role: currentUser?.role,
-        section_id: currentUser?.section_id
-      });
-
-      // ============================================================================
-      // VENDORS - Filter berdasarkan vendor_sections
-      // ============================================================================
-      let vendorsQuery = supabase.from('vendors').select('*').order('name');
-
-      if (isSectionStaff && currentUser?.section_id) {
-        const { data: vendorSections } = await supabase
-          .from('vendor_sections')
-          .select('vendor_id')
-          .eq('section_id', currentUser.section_id);
-        
-        const vendorIds = vendorSections?.map(vs => vs.vendor_id) || [];
-        
-        if (vendorIds.length > 0) {
-          vendorsQuery = vendorsQuery.in('id', vendorIds);
-        } else {
-          vendorsQuery = vendorsQuery.eq('id', '00000000-0000-0000-0000-000000000000');
-        }
+      // ========== FETCH BLOCKS ==========
+      let blocksQuery = supabase.from('blocks').select('*').order('name');
+      
+      // Admin: lihat semua
+      // Section Head/Supervisor: hanya blok section mereka
+      // Vendor: tidak perlu filter di blocks, filter di block_activities
+      if (['section_head', 'supervisor'].includes(currentUser?.role)) {
+        blocksQuery = blocksQuery.eq('section_id', currentUser.section_id);
       }
 
-      if (isVendor && currentUser?.vendor_id) {
-        vendorsQuery = vendorsQuery.eq('id', currentUser.vendor_id);
-      }
+      const { data: blocksData, error: blocksError } = await blocksQuery;
+      if (blocksError) throw blocksError;
 
-      // ============================================================================
-      // BLOCKS - Master blocks (Pool Divisi - accessible to all admin & section staff)
-      // ============================================================================
-      let blocksQuery = supabase.from('blocks').select('*').order('zone, name');
-
-      // Admin & Section staff: bisa akses semua master blocks
-      // Vendor: tidak perlu akses master blocks
-      if (isVendor) {
-        blocksQuery = blocksQuery.limit(0);
-      }
-
-      // ============================================================================
-      // WORKERS - Filter by vendor
-      // ============================================================================
-      let workersQuery = supabase.from('workers').select('*, vendors(name)').order('name');
-
-      if (isSectionStaff && currentUser?.section_id) {
-        const { data: vendorSections } = await supabase
-          .from('vendor_sections')
-          .select('vendor_id')
-          .eq('section_id', currentUser.section_id);
-        
-        const vendorIds = vendorSections?.map(vs => vs.vendor_id) || [];
-        
-        if (vendorIds.length > 0) {
-          workersQuery = workersQuery.in('vendor_id', vendorIds);
-        } else {
-          workersQuery = workersQuery.eq('vendor_id', '00000000-0000-0000-0000-000000000000');
-        }
-      }
-
-      if (isVendor && currentUser?.vendor_id) {
-        workersQuery = workersQuery.eq('vendor_id', currentUser.vendor_id);
-      }
-
-      // ============================================================================
-      // ACTIVITY_TYPES - Filter by section assignment
-      // ============================================================================
+      // ========== FETCH ACTIVITY TYPES (dengan filter section) ==========
       let activityTypesQuery = supabase
         .from('activity_types')
         .select('*')
         .eq('active', true)
         .order('name');
 
-      // Section staff: hanya aktivitas yang di-assign ke section mereka
-      if (isSectionStaff && currentUser?.section_id) {
+      // Jika bukan admin, filter hanya aktivitas yang di-assign ke section user
+      if (currentUser?.role !== 'admin') {
         const { data: sectionActivities } = await supabase
           .from('section_activities')
           .select('activity_type_id')
           .eq('section_id', currentUser.section_id);
+
+        const allowedActivityIds = sectionActivities?.map(sa => sa.activity_type_id) || [];
         
-        const assignedActivityIds = sectionActivities?.map(sa => sa.activity_type_id) || [];
-        
-        console.log('📋 Section activities assigned:', assignedActivityIds.length);
-        
-        if (assignedActivityIds.length > 0) {
-          activityTypesQuery = activityTypesQuery.in('id', assignedActivityIds);
+        if (allowedActivityIds.length > 0) {
+          activityTypesQuery = activityTypesQuery.in('id', allowedActivityIds);
         } else {
-          // Section belum di-assign aktivitas apapun
-          activityTypesQuery = activityTypesQuery.limit(0);
+          // Tidak ada aktivitas untuk section ini
+          const { data: activityTypesData } = await activityTypesQuery;
+          setData({
+            blocks: blocksData || [],
+            activityTypes: [], // ❌ Kosongkan activity types
+            blockActivities: [],
+            transactions: [],
+            vendors: [],
+            sections: [],
+            workers: [],
+            loading: false,
+            currentUser
+          });
+          return;
         }
       }
 
-      // Vendor: aktivitas dari semua section yang mereka layani
-      if (isVendor && currentUser?.vendor_sections?.length > 0) {
-        const vendorSectionIds = currentUser.vendor_sections.map(s => s.id);
-        
-        const { data: sectionActivities } = await supabase
-          .from('section_activities')
-          .select('activity_type_id')
-          .in('section_id', vendorSectionIds);
-        
-        const assignedActivityIds = [...new Set(
-          sectionActivities?.map(sa => sa.activity_type_id) || []
-        )];
-        
-        if (assignedActivityIds.length > 0) {
-          activityTypesQuery = activityTypesQuery.in('id', assignedActivityIds);
-        } else {
-          activityTypesQuery = activityTypesQuery.limit(0);
-        }
-      }
+      const { data: activityTypesData, error: activityTypesError } = await activityTypesQuery;
+      if (activityTypesError) throw activityTypesError;
 
-      // ============================================================================
-      // BLOCK_ACTIVITIES - Filter by section_id
-      // ============================================================================
+      // ========== FETCH BLOCK ACTIVITIES (CRITICAL: Filter section) ==========
       let blockActivitiesQuery = supabase
         .from('block_activities')
-        .select('*')
-        .order('target_bulan, created_at');
+        .select(`
+          *,
+          blocks(id, code, name, zone, luas_total),
+          activity_types(id, code, name),
+          sections(id, code, name)
+        `)
+        .order('created_at', { ascending: false });
 
-      // Section staff: hanya block_activities untuk section mereka
-      if (isSectionStaff && currentUser?.section_id) {
-        console.log('🔍 Filtering block_activities by section_id:', currentUser.section_id);
-        
+      // 🔒 FILTER BERDASARKAN ROLE
+      if (currentUser?.role === 'section_head' || currentUser?.role === 'supervisor') {
         blockActivitiesQuery = blockActivitiesQuery.eq('section_id', currentUser.section_id);
-      } 
-      // Vendor: block_activities dari semua section yang mereka layani
-      else if (isVendor && currentUser?.vendor_sections?.length > 0) {
-        const vendorSectionIds = currentUser.vendor_sections.map(s => s.id);
-        blockActivitiesQuery = blockActivitiesQuery.in('section_id', vendorSectionIds);
-      }
-      // Admin: no filter (semua)
+      } else if (currentUser?.role === 'vendor') {
+        // 🔥 FIX UTAMA: Vendor hanya lihat section yang di-assign
+        const { data: vendorSections } = await supabase
+          .from('vendor_sections')
+          .select('section_id')
+          .eq('vendor_id', currentUser.vendor_id);
 
-      // ============================================================================
-      // TRANSACTIONS - Filter by vendor
-      // ============================================================================
+        const allowedSectionIds = vendorSections?.map(vs => vs.section_id) || [];
+
+        if (allowedSectionIds.length > 0) {
+          blockActivitiesQuery = blockActivitiesQuery
+            .eq('vendor_id', currentUser.vendor_id)
+            .in('section_id', allowedSectionIds);
+        } else {
+          // Vendor belum di-assign section
+          blockActivitiesQuery = blockActivitiesQuery.eq('id', null); // Return empty
+        }
+      }
+
+      const { data: blockActivitiesData, error: blockActivitiesError } = await blockActivitiesQuery;
+      if (blockActivitiesError) throw blockActivitiesError;
+
+      // ========== FETCH TRANSACTIONS (CRITICAL: Filter section) ==========
       let transactionsQuery = supabase
         .from('transactions')
         .select(`
           *,
-          vendors(name),
-          activity_types(name, code)
+          vendors(id, code, name),
+          activity_types(id, code, name),
+          sections(id, code, name)
         `)
         .order('tanggal', { ascending: false });
 
-      if (isSectionStaff && currentUser?.section_id) {
+      // 🔒 FILTER BERDASARKAN ROLE
+      if (currentUser?.role === 'section_head' || currentUser?.role === 'supervisor') {
+        transactionsQuery = transactionsQuery.eq('section_id', currentUser.section_id);
+      } else if (currentUser?.role === 'vendor') {
+        // 🔥 FIX UTAMA: Vendor hanya lihat transaksi dari section yang di-assign
         const { data: vendorSections } = await supabase
           .from('vendor_sections')
-          .select('vendor_id')
-          .eq('section_id', currentUser.section_id);
-        
-        const vendorIds = vendorSections?.map(vs => vs.vendor_id) || [];
-        
-        if (vendorIds.length > 0) {
-          transactionsQuery = transactionsQuery.in('vendor_id', vendorIds);
+          .select('section_id')
+          .eq('vendor_id', currentUser.vendor_id);
+
+        const allowedSectionIds = vendorSections?.map(vs => vs.section_id) || [];
+
+        if (allowedSectionIds.length > 0) {
+          transactionsQuery = transactionsQuery
+            .eq('vendor_id', currentUser.vendor_id)
+            .in('section_id', allowedSectionIds);
         } else {
-          transactionsQuery = transactionsQuery.eq('vendor_id', '00000000-0000-0000-0000-000000000000');
+          transactionsQuery = transactionsQuery.eq('id', null); // Return empty
         }
       }
 
-      if (isVendor && currentUser?.vendor_id) {
-        transactionsQuery = transactionsQuery.eq('vendor_id', currentUser.vendor_id);
-      }
+      const { data: transactionsData, error: transactionsError } = await transactionsQuery;
+      if (transactionsError) throw transactionsError;
 
-      // ============================================================================
-      // Execute all queries
-      // ============================================================================
-      const [
-        vendorsRes, 
-        blocksRes, 
-        workersRes, 
-        activityRes, 
-        blockActivitiesRes,
-        transactionsRes
-      ] = await Promise.all([
-        vendorsQuery,
-        blocksQuery,
-        workersQuery,
-        activityTypesQuery,
-        blockActivitiesQuery,
-        transactionsQuery
-      ]);
+      // ========== FETCH VENDORS ==========
+      const { data: vendorsData, error: vendorsError } = await supabase
+        .from('vendors')
+        .select('*')
+        .order('name');
+      if (vendorsError) throw vendorsError;
 
-      if (vendorsRes.error) throw vendorsRes.error;
-      if (blocksRes.error) throw blocksRes.error;
-      if (workersRes.error) throw workersRes.error;
-      if (activityRes.error) throw activityRes.error;
-      if (blockActivitiesRes.error) throw blockActivitiesRes.error;
-      if (transactionsRes.error) throw transactionsRes.error;
+      // ========== FETCH SECTIONS ==========
+      const { data: sectionsData, error: sectionsError } = await supabase
+        .from('sections')
+        .select('*')
+        .order('name');
+      if (sectionsError) throw sectionsError;
 
-      setVendors(vendorsRes.data || []);
-      setBlocks(blocksRes.data || []);
-      setWorkers(workersRes.data || []);
-      setActivityTypes(activityRes.data || []);
-      setBlockActivities(blockActivitiesRes.data || []);
-      setTransactions(transactionsRes.data || []);
-      
-      console.log('✅ Data loaded:', {
-        vendors: vendorsRes.data?.length,
-        blocks: blocksRes.data?.length,
-        workers: workersRes.data?.length,
-        activityTypes: activityRes.data?.length,
-        blockActivities: blockActivitiesRes.data?.length,
-        transactions: transactionsRes.data?.length,
-        role: currentUser?.role,
-        section_id: currentUser?.section_id
+      // ========== FETCH WORKERS ==========
+      const { data: workersData, error: workersError } = await supabase
+        .from('workers')
+        .select('*')
+        .order('name');
+      if (workersError) throw workersError;
+
+      setData({
+        blocks: blocksData || [],
+        activityTypes: activityTypesData || [],
+        blockActivities: blockActivitiesData || [],
+        transactions: transactionsData || [],
+        vendors: vendorsData || [],
+        sections: sectionsData || [],
+        workers: workersData || [],
+        loading: false,
+        currentUser,
+        supabase // Expose supabase untuk detail queries
       });
+
     } catch (err) {
-      console.error('❌ Error fetching data:', err);
-      alert('Error loading data: ' + err.message);
-    } finally {
-      setLoading(false);
+      console.error('Error fetching data:', err);
+      setData(prev => ({ ...prev, loading: false }));
     }
   };
 
   useEffect(() => {
-    fetchAllData();
-  }, []);
-
-  // ============================================================================
-  // CRUD FUNCTIONS
-  // ============================================================================
-  const addVendor = async (data) => {
-    const { error } = await supabase.from('vendors').insert([data]);
-    if (error) throw error;
-    await fetchAllData();
-  };
-
-  const updateVendor = async (id, data) => {
-    const { error } = await supabase.from('vendors').update(data).eq('id', id);
-    if (error) throw error;
-    await fetchAllData();
-  };
-
-  const deleteVendor = async (id) => {
-    const { error } = await supabase.from('vendors').delete().eq('id', id);
-    if (error) throw error;
-    await fetchAllData();
-  };
-
-  const addBlock = async (data) => {
-    const { error } = await supabase.from('blocks').insert([data]);
-    if (error) throw error;
-    await fetchAllData();
-  };
-
-  const updateBlock = async (id, data) => {
-    const { error } = await supabase.from('blocks').update(data).eq('id', id);
-    if (error) throw error;
-    await fetchAllData();
-  };
-
-  const deleteBlock = async (id) => {
-    const { error } = await supabase.from('blocks').delete().eq('id', id);
-    if (error) throw error;
-    await fetchAllData();
-  };
-
-  const addWorker = async (data) => {
-    const { error } = await supabase.from('workers').insert([data]);
-    if (error) throw error;
-    await fetchAllData();
-  };
-
-  const updateWorker = async (id, data) => {
-    const { error } = await supabase.from('workers').update(data).eq('id', id);
-    if (error) throw error;
-    await fetchAllData();
-  };
-
-  const deleteWorker = async (id) => {
-    const { error } = await supabase.from('workers').delete().eq('id', id);
-    if (error) throw error;
-    await fetchAllData();
-  };
-
-  const addBlockActivity = async (data) => {
-    // AUTO-ASSIGN section_id jika user bukan admin
-    if (!data.section_id && currentUser?.role !== 'admin' && currentUser?.section_id) {
-      data.section_id = currentUser.section_id;
-      console.log('🔧 Auto-assigned section_id:', data.section_id);
+    if (currentUser) {
+      fetchAllData();
     }
-    
-    const { error } = await supabase.from('block_activities').insert([data]);
-    if (error) throw error;
-    await fetchAllData();
-  };
+  }, [currentUser?.id]);
 
-  const deleteBlockActivity = async (id) => {
-    const { error } = await supabase.from('block_activities').delete().eq('id', id);
-    if (error) throw error;
-    await fetchAllData();
-  };
-
+  // Return dengan helper functions
   return {
-    loading,
-    vendors,
-    blocks,
-    workers,
-    activityTypes,
-    blockActivities,
-    transactions,
+    ...data,
     fetchAllData,
-    addVendor,
-    updateVendor,
-    deleteVendor,
-    addBlock,
-    updateBlock,
-    deleteBlock,
-    addWorker,
-    updateWorker,
-    deleteWorker,
-    addBlockActivity,
-    deleteBlockActivity,
-    supabase,
-    currentUser
+    // Helper: Check if user can access a section
+    canAccessSection: (sectionId) => {
+      if (currentUser?.role === 'admin') return true;
+      if (['section_head', 'supervisor'].includes(currentUser?.role)) {
+        return currentUser.section_id === sectionId;
+      }
+      if (currentUser?.role === 'vendor') {
+        // Check vendor_sections
+        return data.blockActivities.some(ba => ba.section_id === sectionId);
+      }
+      return false;
+    }
   };
 }
