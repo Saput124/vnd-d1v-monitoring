@@ -404,6 +404,32 @@ Uptime:            TBD
 
 ---
 
+## ⚠️ Security Notes
+
+**Current Approach (v1.0):**
+- RLS policies are intentionally permissive (`USING (true)`)
+- Access control enforced at **application level** (React)
+- Suitable for **internal use** with trusted users
+
+**Production Roadmap (v2.0):**
+- [ ] Migrate to Supabase Auth
+- [ ] Implement proper RLS policies
+- [ ] Database-level access control
+- [ ] Remove app-level filtering
+🎯 Summary
+Issue
+Severity
+Fix Now?
+Why
+Security Definer Views
+ERROR
+✅ YES
+Views tidak dipakai, hapus aja
+RLS Always True
+WARNING
+❌ NO
+Acceptable untuk internal app, filtering di React cukup
+
 <div align="center">
 
 **Made with ☕ by VND D1V Team**
