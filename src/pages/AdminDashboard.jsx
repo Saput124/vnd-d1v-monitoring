@@ -17,6 +17,11 @@ export default function AdminDashboard() {
   const { user, logout } = useAuth();
   const data = useSupabaseData();
   const [activeTab, setActiveTab] = useState('dashboard');
+const [activeSubTab, setActiveSubTab] = useState({
+  master: 'blocks',
+  transaction: 'input',
+  management: 'users'
+});
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-green-50">
@@ -43,47 +48,133 @@ export default function AdminDashboard() {
         </div>
       </header>
 
-      {/* Navigation Tabs - UPDATED */}
-      <div className="bg-white shadow-md border-b">
-        <div className="container mx-auto px-4">
-          <div className="flex space-x-1 overflow-x-auto">
-            {[
-              { id: 'dashboard', label: '📊 Dashboard', color: 'blue' },
-              { id: 'history', label: '📜 Transaksi History', color: 'purple' },
-              { id: 'transaction', label: '➕ Input Transaksi', color: 'green' },
-              { id: 'registration', label: '📋 Block Registration', color: 'yellow' },
-              { id: 'activities', label: '🎯 Activity Management', color: 'pink' },
-              { id: 'section_activities', label: '🔗 Section Activities', color: 'indigo' },
-              { id: 'master', label: '🗂️ Master Data', color: 'cyan' },
-              { id: 'users', label: '👥 User Management', color: 'red' },
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-6 py-4 font-medium transition-all whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? `text-${tab.color}-600 border-b-2 border-${tab.color}-600 bg-${tab.color}-50`
-                    : 'text-gray-600 hover:text-blue-600 hover:bg-gray-50'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+      // Tab groups
+const tabGroups = {
+  single: [
+    { id: 'dashboard', label: '📊 Dashboard', color: 'blue' }
+  ],
+  transaction: {
+    label: '💼 Transaksi',
+    tabs: [
+      { id: 'input', label: '➕ Input Transaksi' },
+      { id: 'history', label: '📜 History' }
+    ]
+  },
+  registration: {
+    label: '📋 Registrasi',
+    tabs: [
+      { id: 'blocks', label: '🗺️ Block Registration' },
+      { id: 'activities', label: '🎯 Activity Management' }
+    ]
+  },
+  assignment: {
+    label: '🔗 Assignment',
+    tabs: [
+      { id: 'section_activities', label: '📍 Section Activities' },
+      { id: 'vendor_assignments', label: '👷 Vendor Assignment' }
+    ]
+  },
+  master: {
+    label: '🗂️ Master Data',
+    tabs: [
+      { id: 'blocks', label: '🗺️ Blocks' },
+      { id: 'vendors', label: '👥 Vendors' },
+      { id: 'workers', label: '👷 Workers' }
+    ]
+  },
+  management: {
+    label: '⚙️ Management',
+    tabs: [
+      { id: 'users', label: '👥 Users' }
+    ]
+  }
+};
 
-      {/* Content */}
-      <div className="container mx-auto px-4 py-8">
-        {activeTab === 'dashboard' && <Dashboard data={data} loading={data.loading} />}
-        {activeTab === 'history' && <TransactionHistory data={data} loading={data.loading} />}
-        {activeTab === 'transaction' && <TransactionForm data={data} loading={data.loading} />}
-        {activeTab === 'registration' && <BlockRegistration data={data} loading={data.loading} />}
-        {activeTab === 'activities' && <ActivityManagement data={data} loading={data.loading} />}
-        {activeTab === 'section_activities' && <SectionActivityManagement />}
-        {activeTab === 'master' && <MasterData data={data} loading={data.loading} />}
-        {activeTab === 'users' && <UserManagement />}
+// Render navigation
+<div className="bg-white shadow-md border-b">
+  <div className="container mx-auto px-4">
+    {/* Main tabs */}
+    <div className="flex space-x-1 overflow-x-auto border-b">
+      {/* Single tabs */}
+      {tabGroups.single.map(tab => (
+        <button key={tab.id} onClick={() => setActiveTab(tab.id)}>
+          {tab.label}
+        </button>
+      ))}
+      
+      {/* Grouped tabs */}
+      {Object.entries(tabGroups).filter(([key]) => key !== 'single').map(([groupKey, group]) => (
+        <button 
+          key={groupKey}
+          onClick={() => setActiveTab(groupKey)}
+          className={activeTab === groupKey ? 'active' : ''}
+        >
+          {group.label}
+        </button>
+      ))}
+    </div>
+    
+    {/* Sub-tabs (if grouped tab active) */}
+    {activeTab !== 'dashboard' && tabGroups[activeTab]?.tabs && (
+      <div className="flex space-x-1 py-2 border-b bg-gray-50">
+        {tabGroups[activeTab].tabs.map(subTab => (
+          <button
+            key={subTab.id}
+            onClick={() => setActiveSubTab({...activeSubTab, [activeTab]: subTab.id})}
+            className={`px-4 py-2 text-sm ${
+              activeSubTab[activeTab] === subTab.id 
+                ? 'bg-white border-b-2 border-blue-600 text-blue-600' 
+                : 'text-gray-600 hover:text-blue-600'
+            }`}
+          >
+            {subTab.label}
+          </button>
+        ))}
       </div>
+    )}
+  </div>
+</div>
+
+{/* Content area */}
+<div className="container mx-auto px-4 py-8">
+  {activeTab === 'dashboard' && <Dashboard data={data} loading={data.loading} />}
+  
+  {activeTab === 'transaction' && (
+    <>
+      {activeSubTab.transaction === 'input' && <TransactionForm data={data} loading={data.loading} />}
+      {activeSubTab.transaction === 'history' && <TransactionHistory data={data} loading={data.loading} />}
+    </>
+  )}
+  
+  {activeTab === 'registration' && (
+    <>
+      {activeSubTab.registration === 'blocks' && <BlockRegistration data={data} loading={data.loading} />}
+      {activeSubTab.registration === 'activities' && <ActivityManagement data={data} loading={data.loading} />}
+    </>
+  )}
+  
+  {activeTab === 'assignment' && (
+    <>
+      {activeSubTab.assignment === 'section_activities' && <SectionActivityManagement />}
+      {activeSubTab.assignment === 'vendor_assignments' && <VendorAssignmentManagement />}
+    </>
+  )}
+  
+  {activeTab === 'master' && (
+    <MasterData 
+      data={data} 
+      loading={data.loading} 
+      activeSubTab={activeSubTab.master}
+      setActiveSubTab={(tab) => setActiveSubTab({...activeSubTab, master: tab})}
+    />
+  )}
+  
+  {activeTab === 'management' && (
+    <>
+      {activeSubTab.management === 'users' && <UserManagement />}
+    </>
+  )}
+</div>
 
       {/* Footer Info */}
       <footer className="bg-white border-t mt-12 py-6">
