@@ -57,8 +57,7 @@ export default function AdminDashboard() {
       tabs: [
         { id: 'blocks', label: '🗺️ Blocks' },
         { id: 'vendors', label: '👥 Vendors' },
-        { id: 'workers', label: '👷 Workers' },
-        { id: 'materials', label: '📦 Materials' }
+        { id: 'workers', label: '👷 Workers' }
       ]
     },
     management: {
@@ -197,20 +196,7 @@ export default function AdminDashboard() {
         )}
 
         {activeTab === 'master' && (
-          <>
-            {activeSubTab.master === 'materials' ? (
-              <MaterialManagement data={data} loading={data.loading} />
-            ) : (
-              <MasterData
-                data={data}
-                loading={data.loading}
-                activeSubTab={activeSubTab.master}
-                setActiveSubTab={(tab) =>
-                  setActiveSubTab(prev => ({ ...prev, master: tab }))
-                }
-              />
-            )}
-          </>
+          <MasterData data={data} loading={data.loading} />
         )}
 
         {activeTab === 'management' && (
