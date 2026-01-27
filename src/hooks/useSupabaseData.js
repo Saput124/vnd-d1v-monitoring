@@ -11,6 +11,7 @@ export function useSupabaseData() {
     vendors: [],
     vendorAssignments: [],
     sections: [],
+    sectionActivities: [],
     workers: [],
     loading: true,
     currentUser: null,
@@ -43,6 +44,12 @@ export function useSupabaseData() {
         .select('*')
         .order('created_at', { ascending: false });
       if (vaError) throw vaError;
+
+      /* ================= SECTION ACTIVITIES ================= */
+      const { data: sectionActivitiesData, error: saError } = await supabase
+        .from('section_activities')
+        .select('*');
+      if (saError) throw saError;
 
       /* ================= ACTIVITY TYPES ================= */
       let activityTypesData = [];
@@ -171,6 +178,7 @@ export function useSupabaseData() {
         vendors: vendorsData || [],
         vendorAssignments: vendorAssignmentsData || [],
         sections: sectionsData || [],
+        sectionActivities: sectionActivitiesData || [],
         workers: workersData || [],
         loading: false,
         currentUser,
