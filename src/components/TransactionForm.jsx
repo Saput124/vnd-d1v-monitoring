@@ -4,7 +4,6 @@
 import { useState, useMemo, useEffect } from 'react';
   
 export default function TransactionForm({ data, loading }) {
-  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     tanggal: new Date().toISOString().split('T')[0],
     vendor_id: '',
@@ -42,32 +41,44 @@ export default function TransactionForm({ data, loading }) {
     return data.activityTypes.find(a => a.id === formData.activity_type_id);
   }, [formData.activity_type_id, data.activityTypes]);
 
-  // Filter vendors based on activity assignment
+  // ⭐ NEW: Filter vendors by activity assignment
   const availableVendors = useMemo(() => {
     if (!formData.activity_type_id) return [];
     
+    // If user is vendor, only show themselves
     if (data.currentUser?.role === 'vendor') {
-      // Vendor is fixed to their own account
-      return [data.vendors.find(v => v.id === data.currentUser.vendor_id)].filter(Boolean);
+      const vendor = data.vendors.find(v => v.id === data.currentUser.vendor_id);
+      return vendor ? [vendor] : [];
     }
     
-    // For section staff, get vendors assigned to their section + selected activity
+    // Get section_id based on role
     let targetSectionId = null;
     if (['section_head', 'supervisor'].includes(data.currentUser?.role)) {
       targetSectionId = data.currentUser.section_id;
     }
+    // Admin would need to select section first (for now, show all vendors)
+    // TODO: Add section selection for admin
     
-    if (!targetSectionId && data.currentUser?.role !== 'admin') return [];
+    if (!targetSectionId && data.currentUser?.role !== 'admin') {
+      return [];
+    }
     
-    // Get vendors assigned to this section + activity
+    // For admin, show all vendors (for now)
+    if (data.currentUser?.role === 'admin') {
+      return data.vendors;
+    }
+    
+    // Filter vendors assigned to this section + activity
     const assignedVendorIds = data.vendorAssignments
-      ?.filter(va => {
-        const sectionMatch = !targetSectionId || va.section_id === targetSectionId;
-        return sectionMatch && va.activity_type_id === formData.activity_type_id;
-      })
+      ?.filter(va => 
+        va.section_id === targetSectionId &&
+        va.activity_type_id === formData.activity_type_id
+      )
       .map(va => va.vendor_id) || [];
     
-    return data.vendors.filter(v => assignedVendorIds.includes(v.id));
+    const filtered = data.vendors.filter(v => assignedVendorIds.includes(v.id));
+    
+    return filtered;
   }, [formData.activity_type_id, data.vendors, data.vendorAssignments, data.currentUser]);
 
   // ⭐ FIXED: Filter blok by activity + vendor assignment
@@ -105,13 +116,6 @@ export default function TransactionForm({ data, loading }) {
     if (['section_head', 'supervisor'].includes(data.currentUser?.role)) {
       filtered = filtered.filter(ba => 
         ba.section_id === data.currentUser.section_id
-      );
-    }
-
-    // ⭐ FIX: Filter by execution_number for WEEDING activity
-    if (selectedActivity?.code === 'WEEDING' && formData.execution_number) {
-      filtered = filtered.filter(ba => 
-        ba.execution_number === formData.execution_number
       );
     }
 
@@ -234,18 +238,20 @@ export default function TransactionForm({ data, loading }) {
     return formData.selectedWorkers.length;
   }, [formData.workerMode, formData.jumlahPekerja, formData.selectedWorkers]);
 
-  const handleSubmit = async () => {
-    // Prevent double submit
-    if (submitting) return;
-    
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    // ⭐ UPDATED: Validate activity first (new order)
+    if (!formData.activity_type_id) {
+      alert('❌ Pilih aktivitas terlebih dahulu!');
+      return;
+    }
+
     if (!formData.vendor_id) {
       alert('❌ Pilih vendor!');
       return;
     }
-    if (!formData.activity_type_id) {
-      alert('❌ Pilih aktivitas!');
-      return;
-    }
+    
     if (formData.selectedBlocks.length === 0) {
       alert('❌ Pilih minimal 1 blok!');
       return;
@@ -295,9 +301,6 @@ export default function TransactionForm({ data, loading }) {
       }
     }
 
-    setSubmitting(true);
-    let transactionId = null;
-
     try {
       const transCode = `TRX-${Date.now()}`;
       
@@ -305,7 +308,6 @@ export default function TransactionForm({ data, loading }) {
       const firstBlockActivity = availableBlocks.find(ba => ba.id === formData.selectedBlocks[0].id);
       const sectionId = firstBlockActivity.section_id;
 
-      // Step 1: Insert transaction
       const { data: transData, error: transError } = await data.supabase
         .from('transactions')
         .insert([{
@@ -313,7 +315,7 @@ export default function TransactionForm({ data, loading }) {
           tanggal: formData.tanggal,
           vendor_id: formData.vendor_id,
           activity_type_id: formData.activity_type_id,
-          section_id: sectionId,
+          section_id: sectionId, // ⭐ Get from block_activity
           jumlah_pekerja: totalPekerja,
           kondisi: formData.kondisi || null,
           catatan: formData.catatan || null,
@@ -323,9 +325,7 @@ export default function TransactionForm({ data, loading }) {
         .single();
 
       if (transError) throw transError;
-      transactionId = transData.id;
 
-      // Step 2: Insert transaction_blocks
       const blockInserts = formData.selectedBlocks.map(sb => ({
         transaction_id: transData.id,
         block_activity_id: sb.id,
@@ -338,29 +338,6 @@ export default function TransactionForm({ data, loading }) {
 
       if (blocksError) throw blocksError;
 
-      // ⭐ CRITICAL FIX #2: Update block_activities progress
-      for (const sb of formData.selectedBlocks) {
-        const ba = availableBlocks.find(b => b.id === sb.id);
-        const newLuasDikerjakan = (ba.luas_dikerjakan || 0) + parseFloat(sb.luasan);
-        const newPersenSelesai = (newLuasDikerjakan / ba.target_luasan) * 100;
-        const newStatus = newPersenSelesai >= 100 ? 'completed' : 
-                         newLuasDikerjakan > 0 ? 'in_progress' : 'not_started';
-        
-        const { error: updateError } = await data.supabase
-          .from('block_activities')
-          .update({
-            luas_dikerjakan: newLuasDikerjakan,
-            luas_sisa: ba.target_luasan - newLuasDikerjakan,
-            persen_selesai: Math.min(newPersenSelesai, 100),
-            status: newStatus,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', sb.id);
-
-        if (updateError) throw updateError;
-      }
-
-      // Step 3: Insert transaction_workers
       if (formData.workerMode === 'list' && formData.selectedWorkers.length > 0) {
         const workerInserts = formData.selectedWorkers.map(wid => ({
           transaction_id: transData.id,
@@ -374,7 +351,6 @@ export default function TransactionForm({ data, loading }) {
         if (workersError) throw workersError;
       }
 
-      // Step 4: Insert activity-specific data
       if (selectedActivity?.code === 'TANAM') {
         const { error: tanamError } = await data.supabase
           .from('transaction_tanam')
@@ -415,7 +391,6 @@ export default function TransactionForm({ data, loading }) {
 
       alert(`✅ Transaksi berhasil disimpan!\n\nKode: ${transCode}\nTotal Luasan: ${totalLuasan.toFixed(2)} Ha\nPekerja: ${totalPekerja} orang`);
 
-      // Reset form
       setFormData({
         tanggal: new Date().toISOString().split('T')[0],
         vendor_id: data.currentUser?.role === 'vendor' ? data.currentUser.vendor_id : '',
@@ -433,28 +408,11 @@ export default function TransactionForm({ data, loading }) {
         catatan: ''
       });
 
-      // Refresh data
       await data.fetchAllData();
 
     } catch (err) {
       console.error('Error submitting transaction:', err);
-      
-      // ⭐ CRITICAL FIX #4: Rollback on error
-      if (transactionId) {
-        try {
-          await data.supabase
-            .from('transactions')
-            .delete()
-            .eq('id', transactionId);
-          console.log('Transaction rolled back');
-        } catch (rollbackError) {
-          console.error('Rollback failed:', rollbackError);
-        }
-      }
-      
       alert('❌ Error: ' + err.message);
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -474,33 +432,31 @@ export default function TransactionForm({ data, loading }) {
         </h2>
 
         <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium mb-2">Tanggal *</label>
               <input
                 type="date"
                 value={formData.tanggal}
                 onChange={(e) => setFormData({...formData, tanggal: e.target.value})}
-                min={(() => {
-                  const minDate = new Date();
-                  minDate.setMonth(minDate.getMonth() - 6);
-                  return minDate.toISOString().split('T')[0];
-                })()}
-                max={new Date().toISOString().split('T')[0]}
                 className="w-full px-4 py-2 border rounded-lg"
+                max={new Date().toISOString().split('T')[0]}
                 required
               />
-              <p className="text-xs text-gray-500 mt-1">Maksimal 6 bulan ke belakang</p>
             </div>
 
+            {/* ⭐ STEP 1: Pilih Aktivitas DULU */}
             <div>
-              <label className="block text-sm font-medium mb-2">Aktivitas *</label>
+              <label className="block text-sm font-medium mb-2">
+                Aktivitas * 
+                <span className="text-xs text-gray-500 ml-2">(Pilih aktivitas dulu)</span>
+              </label>
               <select
                 value={formData.activity_type_id}
                 onChange={(e) => setFormData({
                   ...formData, 
                   activity_type_id: e.target.value,
-                  vendor_id: data.currentUser?.role === 'vendor' ? data.currentUser.vendor_id : '',
+                  vendor_id: data.currentUser?.role === 'vendor' ? data.currentUser.vendor_id : '', // Reset vendor kecuali role vendor
                   selectedBlocks: [],
                   execution_number: 1,
                   kondisi: '',
@@ -515,9 +471,17 @@ export default function TransactionForm({ data, loading }) {
                 ))}
               </select>
             </div>
+          </div>
 
+          {/* ⭐ STEP 2: Pilih Vendor (muncul setelah aktivitas dipilih) */}
+          {formData.activity_type_id && (
             <div>
-              <label className="block text-sm font-medium mb-2">Vendor *</label>
+              <label className="block text-sm font-medium mb-2">
+                Vendor * 
+                <span className="text-xs text-gray-500 ml-2">
+                  (Vendor yang di-assign untuk aktivitas {data.activityTypes.find(a => a.id === formData.activity_type_id)?.name})
+                </span>
+              </label>
               {data.currentUser?.role === 'vendor' ? (
                 <input
                   type="text"
@@ -526,30 +490,33 @@ export default function TransactionForm({ data, loading }) {
                   disabled
                 />
               ) : (
-                <select
-                  value={formData.vendor_id}
-                  onChange={(e) => setFormData({
-                    ...formData, 
-                    vendor_id: e.target.value,
-                    selectedWorkers: [],
-                    workerMode: 'manual',
-                    jumlahPekerja: ''
-                  })}
-                  className="w-full px-4 py-2 border rounded-lg"
-                  required
-                  disabled={!formData.activity_type_id}
-                >
-                  <option value="">-- {formData.activity_type_id ? 'Pilih Vendor' : 'Pilih Aktivitas Dulu'} --</option>
-                  {availableVendors.map(v => (
-                    <option key={v.id} value={v.id}>{v.name}</option>
-                  ))}
-                </select>
-              )}
-              {formData.activity_type_id && availableVendors.length === 0 && data.currentUser?.role !== 'vendor' && (
-                <p className="text-xs text-orange-600 mt-1">⚠️ Tidak ada vendor yang di-assign untuk aktivitas ini</p>
+                <>
+                  <select
+                    value={formData.vendor_id}
+                    onChange={(e) => setFormData({
+                      ...formData, 
+                      vendor_id: e.target.value,
+                      selectedWorkers: [],
+                      workerMode: 'manual',
+                      jumlahPekerja: ''
+                    })}
+                    className="w-full px-4 py-2 border rounded-lg"
+                    required
+                  >
+                    <option value="">-- Pilih Vendor --</option>
+                    {availableVendors.map(v => (
+                      <option key={v.id} value={v.id}>{v.name}</option>
+                    ))}
+                  </select>
+                  {availableVendors.length === 0 && (
+                    <p className="text-xs text-red-600 mt-1">
+                      ⚠️ Tidak ada vendor yang di-assign untuk aktivitas ini di section Anda
+                    </p>
+                  )}
+                </>
               )}
             </div>
-          </div>
+          )}
 
           {selectedActivity?.code === 'WEEDING' && (
             <div>
@@ -593,7 +560,8 @@ export default function TransactionForm({ data, loading }) {
             </div>
           )}
 
-          {formData.activity_type_id && (
+          {/* ⭐ STEP 3: Pilih Blok (muncul setelah activity DAN vendor dipilih) */}
+          {formData.activity_type_id && formData.vendor_id && (
             <div className="border-t pt-6">
               <h3 className="font-semibold text-lg mb-4">🗺️ Pilih Blok (Multiple)</h3>
 
@@ -1016,10 +984,10 @@ export default function TransactionForm({ data, loading }) {
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={submitting || formData.selectedBlocks.length === 0 || totalPekerja === 0}
+              disabled={formData.selectedBlocks.length === 0 || totalPekerja === 0}
               className="flex-1 bg-gradient-to-r from-blue-600 to-green-600 text-white py-3 px-6 rounded-lg font-semibold hover:from-blue-700 hover:to-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg"
             >
-              {submitting ? '⏳ Menyimpan...' : '💾 Simpan Transaksi'}
+              💾 Simpan Transaksi
             </button>
             <button
               type="button"
