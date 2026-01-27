@@ -82,15 +82,10 @@ export default function UserManagement() {
 
       if (usersError) throw usersError;
 
+      // ✅ FIXED: Fetch vendors without nested vendor_sections to avoid relationship error
       const { data: vendorsData, error: vendorsError } = await supabase
         .from('vendors')
-        .select(`
-          *,
-          vendor_sections(
-            section_id,
-            sections(id, code, name)
-          )
-        `)
+        .select('*')
         .order('name');
 
       if (vendorsError) throw vendorsError;
