@@ -13,6 +13,8 @@ export function useSupabaseData() {
     sections: [],
     sectionActivities: [],
     workers: [],
+    materials: [],
+    activityMaterials: [],
     loading: true,
     currentUser: null,
     supabase
@@ -169,6 +171,21 @@ export function useSupabaseData() {
       const { data: workersData, error: workersError } = await workersQuery;
       if (workersError) throw workersError;
 
+      /* ================= MATERIALS ================= */
+      const { data: materialsData, error: materialsError } = await supabase
+        .from('materials')
+        .select('*')
+        .eq('active', true)
+        .order('code');
+      if (materialsError) throw materialsError;
+
+      /* ================= ACTIVITY MATERIALS ================= */
+      const { data: activityMaterialsData, error: amError } = await supabase
+        .from('activity_materials')
+        .select('*')
+        .order('created_at');
+      if (amError) throw amError;
+
       /* ================= SET STATE + HELPERS ================= */
       setData({
         blocks: blocksData || [],
@@ -180,6 +197,8 @@ export function useSupabaseData() {
         sections: sectionsData || [],
         sectionActivities: sectionActivitiesData || [],
         workers: workersData || [],
+        materials: materialsData || [],
+        activityMaterials: activityMaterialsData || [],
         loading: false,
         currentUser,
         supabase,
