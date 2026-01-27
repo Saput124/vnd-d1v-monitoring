@@ -52,7 +52,8 @@ const [activeSubTab, setActiveSubTab] = useState({
 const tabGroups = {
   single: [
     { id: 'dashboard', label: '📊 Dashboard', color: 'blue' }
-  ],
+  ]
+},
   transaction: {
     label: '💼 Transaksi',
     tabs: [
