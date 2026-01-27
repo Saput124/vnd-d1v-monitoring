@@ -11,6 +11,7 @@ import ActivityManagement from '../components/ActivityManagement';
 import SectionActivityManagement from '../components/SectionActivityManagement';
 import VendorAssignmentManagement from '../components/VendorAssignmentManagement';
 import UserManagement from '../components/UserManagement';
+import MaterialManagement from '../components/MaterialManagement';
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
@@ -56,7 +57,8 @@ export default function AdminDashboard() {
       tabs: [
         { id: 'blocks', label: '🗺️ Blocks' },
         { id: 'vendors', label: '👥 Vendors' },
-        { id: 'workers', label: '👷 Workers' }
+        { id: 'workers', label: '👷 Workers' },
+        { id: 'materials', label: '📦 Materials' }
       ]
     },
     management: {
@@ -195,14 +197,20 @@ export default function AdminDashboard() {
         )}
 
         {activeTab === 'master' && (
-          <MasterData
-            data={data}
-            loading={data.loading}
-            activeSubTab={activeSubTab.master}
-            setActiveSubTab={(tab) =>
-              setActiveSubTab(prev => ({ ...prev, master: tab }))
-            }
-          />
+          <>
+            {activeSubTab.master === 'materials' ? (
+              <MaterialManagement data={data} loading={data.loading} />
+            ) : (
+              <MasterData
+                data={data}
+                loading={data.loading}
+                activeSubTab={activeSubTab.master}
+                setActiveSubTab={(tab) =>
+                  setActiveSubTab(prev => ({ ...prev, master: tab }))
+                }
+              />
+            )}
+          </>
         )}
 
         {activeTab === 'management' && (
