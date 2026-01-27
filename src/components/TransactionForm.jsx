@@ -1,10 +1,10 @@
-// src/components/TransactionForm.jsx - FULLY FIXED VERSION
-// ✅ All Critical Issues Fixed
+// src/components/TransactionForm.jsx - FIXED VERSION
+// Filter blok berdasarkan activity + vendor assignment
 
 import { useState, useMemo, useEffect } from 'react';
-import { supabase } from '../utils/supabase';
-
-export default function TransactionForm({ data, loading, onSuccess }) {
+  
+export default function TransactionForm({ data, loading }) {
+  const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     tanggal: new Date().toISOString().split('T')[0],
     vendor_id: '',
@@ -28,15 +28,7 @@ export default function TransactionForm({ data, loading, onSuccess }) {
     search: ''
   });
 
-  const [submitting, setSubmitting] = useState(false);
-  const [lastSubmitTime, setLastSubmitTime] = useState(0);
-
-  // Date validation constants
-  const maxDate = new Date().toISOString().split('T')[0];
-  const minDate = new Date();
-  minDate.setMonth(minDate.getMonth() - 6);
-  const minDateStr = minDate.toISOString().split('T')[0];
-
+  // 🔥 AUTO-FILL VENDOR for vendor role
   useEffect(() => {
     if (data.currentUser?.role === 'vendor' && data.currentUser?.vendor_id) {
       setFormData(prev => ({
@@ -50,23 +42,48 @@ export default function TransactionForm({ data, loading, onSuccess }) {
     return data.activityTypes.find(a => a.id === formData.activity_type_id);
   }, [formData.activity_type_id, data.activityTypes]);
 
+  // Filter vendors based on activity assignment
+  const availableVendors = useMemo(() => {
+    if (!formData.activity_type_id) return [];
+    
+    if (data.currentUser?.role === 'vendor') {
+      // Vendor is fixed to their own account
+      return [data.vendors.find(v => v.id === data.currentUser.vendor_id)].filter(Boolean);
+    }
+    
+    // For section staff, get vendors assigned to their section + selected activity
+    let targetSectionId = null;
+    if (['section_head', 'supervisor'].includes(data.currentUser?.role)) {
+      targetSectionId = data.currentUser.section_id;
+    }
+    
+    if (!targetSectionId && data.currentUser?.role !== 'admin') return [];
+    
+    // Get vendors assigned to this section + activity
+    const assignedVendorIds = data.vendorAssignments
+      ?.filter(va => {
+        const sectionMatch = !targetSectionId || va.section_id === targetSectionId;
+        return sectionMatch && va.activity_type_id === formData.activity_type_id;
+      })
+      .map(va => va.vendor_id) || [];
+    
+    return data.vendors.filter(v => assignedVendorIds.includes(v.id));
+  }, [formData.activity_type_id, data.vendors, data.vendorAssignments, data.currentUser]);
+
+  // ⭐ FIXED: Filter blok by activity + vendor assignment
   const availableBlocks = useMemo(() => {
     if (!formData.activity_type_id) return [];
 
+    // Start: Filter by selected activity & not completed
     let filtered = data.blockActivities.filter(ba => 
       ba.activity_type_id === formData.activity_type_id &&
       ba.status !== 'completed' &&
       ba.status !== 'cancelled'
     );
 
-    // ✅ FIX: Filter by execution number for WEEDING
-    if (selectedActivity?.code === 'WEEDING') {
-      filtered = filtered.filter(ba => 
-        ba.execution_number === formData.execution_number
-      );
-    }
-
+    // ⭐ VENDOR: Filter by assigned sections + activities
     if (data.currentUser?.role === 'vendor') {
+      // Get vendor's assignments for this specific activity
       const assignedSectionIds = data.vendorAssignments
         ?.filter(va => 
           va.vendor_id === data.currentUser.vendor_id &&
@@ -75,6 +92,7 @@ export default function TransactionForm({ data, loading, onSuccess }) {
         .map(va => va.section_id) || [];
 
       if (assignedSectionIds.length === 0) {
+        // Vendor not assigned to any section for this activity
         return [];
       }
 
@@ -83,12 +101,21 @@ export default function TransactionForm({ data, loading, onSuccess }) {
       );
     }
 
+    // ⭐ SECTION STAFF: Filter by own section only
     if (['section_head', 'supervisor'].includes(data.currentUser?.role)) {
       filtered = filtered.filter(ba => 
         ba.section_id === data.currentUser.section_id
       );
     }
 
+    // ⭐ FIX: Filter by execution_number for WEEDING activity
+    if (selectedActivity?.code === 'WEEDING' && formData.execution_number) {
+      filtered = filtered.filter(ba => 
+        ba.execution_number === formData.execution_number
+      );
+    }
+
+    // Apply zone filter
     if (blockFilters.zone) {
       filtered = filtered.filter(ba => {
         const block = data.blocks.find(b => b.id === ba.block_id);
@@ -96,10 +123,12 @@ export default function TransactionForm({ data, loading, onSuccess }) {
       });
     }
 
+    // Apply kategori filter
     if (blockFilters.kategori) {
       filtered = filtered.filter(ba => ba.kategori === blockFilters.kategori);
     }
 
+    // Apply search filter
     if (blockFilters.search) {
       const search = blockFilters.search.toLowerCase();
       filtered = filtered.filter(ba => {
@@ -109,6 +138,7 @@ export default function TransactionForm({ data, loading, onSuccess }) {
       });
     }
 
+    // Map to include block details
     return filtered.map(ba => {
       const block = data.blocks.find(b => b.id === ba.block_id);
       return {
@@ -120,14 +150,13 @@ export default function TransactionForm({ data, loading, onSuccess }) {
       };
     });
   }, [
-    formData.activity_type_id,
-    formData.execution_number,
-    data.blockActivities,
-    data.blocks,
+    formData.activity_type_id, 
+    formData.execution_number, 
+    data.blockActivities, 
+    data.blocks, 
     blockFilters,
     data.currentUser,
-    data.vendorAssignments,
-    selectedActivity
+    data.vendorAssignments // ⭐ Added dependency
   ]);
 
   const availableWorkers = useMemo(() => {
@@ -174,7 +203,7 @@ export default function TransactionForm({ data, loading, onSuccess }) {
   const addMaterial = () => {
     setFormData(prev => ({
       ...prev,
-      materials: [...prev.materials, { material_id: '', dosis_per_ha: '', satuan: 'L' }]
+      materials: [...prev.materials, { name: '', dosis: '' }]
     }));
   };
 
@@ -205,15 +234,10 @@ export default function TransactionForm({ data, loading, onSuccess }) {
     return formData.selectedWorkers.length;
   }, [formData.workerMode, formData.jumlahPekerja, formData.selectedWorkers]);
 
-  // ✅ CRITICAL FIX: Complete transaction handling with rollback
   const handleSubmit = async () => {
     // Prevent double submit
-    const now = Date.now();
-    if (now - lastSubmitTime < 3000) {
-      alert('⏳ Mohon tunggu beberapa detik sebelum submit lagi');
-      return;
-    }
-
+    if (submitting) return;
+    
     if (!formData.vendor_id) {
       alert('❌ Pilih vendor!');
       return;
@@ -227,186 +251,170 @@ export default function TransactionForm({ data, loading, onSuccess }) {
       return;
     }
 
-    // ✅ FIX: Validate luasan for each block
     for (const sb of formData.selectedBlocks) {
-      const blockActivity = availableBlocks.find(ba => ba.id === sb.id);
-      if (!blockActivity) continue;
-
-      const luasan = parseFloat(sb.luasan) || 0;
-      if (luasan <= 0) {
-        alert(`❌ Luasan untuk blok ${blockActivity.block_code} harus > 0`);
+      if (!sb.luasan || parseFloat(sb.luasan) <= 0) {
+        alert('❌ Isi luasan untuk semua blok yang dipilih!');
         return;
       }
-
-      // ✅ FIX: Over-assignment validation
-      const sisaLuasan = blockActivity.luas_total - (blockActivity.luas_dikerjakan || 0);
-      if (luasan > sisaLuasan) {
-        alert(`❌ Blok ${blockActivity.block_code}:\nLuasan input (${luasan} Ha) melebihi sisa (${sisaLuasan.toFixed(2)} Ha)`);
+      const ba = availableBlocks.find(b => b.id === sb.id);
+      if (parseFloat(sb.luasan) > ba.luas_sisa) {
+        alert(`❌ Luasan blok ${ba.block_name} melebihi sisa! Max: ${ba.luas_sisa} Ha`);
         return;
       }
     }
 
     if (totalPekerja === 0) {
-      alert('❌ Input jumlah pekerja!');
+      alert('❌ Input jumlah pekerja atau pilih dari daftar!');
       return;
     }
 
-    // Kondisi validation (only for activities that require it)
-    if (selectedActivity?.code === 'PANEN' || selectedActivity?.code === 'PRUNING') {
+    if (selectedActivity?.code === 'KELENTEK' || 
+        selectedActivity?.code === 'WEEDING' || 
+        selectedActivity?.code === 'WEED_CONTROL') {
       if (!formData.kondisi) {
         alert('❌ Pilih kondisi!');
         return;
       }
     }
 
-    // Harvest specific validations
-    if (selectedActivity?.code === 'PANEN') {
-      if (!formData.estimasi_ton || parseFloat(formData.estimasi_ton) <= 0) {
-        alert('❌ Input estimasi ton!');
+    if (selectedActivity?.code === 'PANEN' && !formData.estimasi_ton) {
+      alert('❌ Isi estimasi ton!');
+      return;
+    }
+
+    if (selectedActivity?.code === 'WEED_CONTROL') {
+      if (formData.materials.length === 0) {
+        alert('❌ Tambahkan minimal 1 herbisida!');
         return;
       }
-      if (!formData.actual_ton || parseFloat(formData.actual_ton) <= 0) {
-        alert('❌ Input actual ton!');
-        return;
+      for (const m of formData.materials) {
+        if (!m.name || !m.dosis) {
+          alert('❌ Lengkapi data herbisida!');
+          return;
+        }
       }
     }
 
-    const confirmed = confirm(
-      `🔍 Konfirmasi:\n\n` +
-      `📅 Tanggal: ${formData.tanggal}\n` +
-      `🏢 Vendor: ${data.vendors.find(v => v.id === formData.vendor_id)?.name}\n` +
-      `🔧 Aktivitas: ${selectedActivity?.name}\n` +
-      `📦 Blok: ${formData.selectedBlocks.length} blok\n` +
-      `📐 Total Luasan: ${totalLuasan.toFixed(2)} Ha\n` +
-      `👷 Total Pekerja: ${totalPekerja} orang\n\n` +
-      `Lanjutkan?`
-    );
-
-    if (!confirmed) return;
-
     setSubmitting(true);
-    setLastSubmitTime(now);
-
     let transactionId = null;
-    let insertedBlockIds = [];
-    let insertedMaterialIds = [];
-    let insertedWorkerIds = [];
 
     try {
-      // 1. Insert transaction header
-      const { data: transaction, error: transError } = await supabase
+      const transCode = `TRX-${Date.now()}`;
+      
+      // Get section_id from first selected block
+      const firstBlockActivity = availableBlocks.find(ba => ba.id === formData.selectedBlocks[0].id);
+      const sectionId = firstBlockActivity.section_id;
+
+      // Step 1: Insert transaction
+      const { data: transData, error: transError } = await data.supabase
         .from('transactions')
-        .insert({
+        .insert([{
+          transaction_code: transCode,
           tanggal: formData.tanggal,
           vendor_id: formData.vendor_id,
           activity_type_id: formData.activity_type_id,
-          execution_number: formData.execution_number,
+          section_id: sectionId,
+          jumlah_pekerja: totalPekerja,
           kondisi: formData.kondisi || null,
-          estimasi_ton: formData.estimasi_ton ? parseFloat(formData.estimasi_ton) : null,
-          actual_ton: formData.actual_ton ? parseFloat(formData.actual_ton) : null,
-          varietas_override: formData.varietas_override || null,
-          total_luasan: totalLuasan,
-          total_pekerja: totalPekerja,
           catatan: formData.catatan || null,
-          created_by: data.currentUser.id
-        })
+          created_by: data.currentUser?.id
+        }])
         .select()
         .single();
 
-      if (transError) throw new Error(`Transaction insert failed: ${transError.message}`);
-      transactionId = transaction.id;
+      if (transError) throw transError;
+      transactionId = transData.id;
 
-      // 2. Insert transaction blocks
+      // Step 2: Insert transaction_blocks
       const blockInserts = formData.selectedBlocks.map(sb => ({
-        transaction_id: transactionId,
+        transaction_id: transData.id,
         block_activity_id: sb.id,
         luas_dikerjakan: parseFloat(sb.luasan)
       }));
 
-      const { data: insertedBlocks, error: blockError } = await supabase
+      const { error: blocksError } = await data.supabase
         .from('transaction_blocks')
-        .insert(blockInserts)
-        .select();
+        .insert(blockInserts);
 
-      if (blockError) throw new Error(`Block insert failed: ${blockError.message}`);
-      insertedBlockIds = insertedBlocks.map(b => b.id);
+      if (blocksError) throw blocksError;
 
-      // ✅ CRITICAL FIX #2: Update progress after inserting blocks
+      // ⭐ CRITICAL FIX #2: Update block_activities progress
       for (const sb of formData.selectedBlocks) {
-        const blockActivity = availableBlocks.find(ba => ba.id === sb.id);
-        if (!blockActivity) continue;
-
-        const newLuasDikerjakan = (blockActivity.luas_dikerjakan || 0) + parseFloat(sb.luasan);
-        const newPersenSelesai = (newLuasDikerjakan / blockActivity.luas_total) * 100;
-        const newStatus = newPersenSelesai >= 100 ? 'completed' : 'in_progress';
-
-        const { error: updateError } = await supabase
+        const ba = availableBlocks.find(b => b.id === sb.id);
+        const newLuasDikerjakan = (ba.luas_dikerjakan || 0) + parseFloat(sb.luasan);
+        const newPersenSelesai = (newLuasDikerjakan / ba.target_luasan) * 100;
+        const newStatus = newPersenSelesai >= 100 ? 'completed' : 
+                         newLuasDikerjakan > 0 ? 'in_progress' : 'not_started';
+        
+        const { error: updateError } = await data.supabase
           .from('block_activities')
           .update({
             luas_dikerjakan: newLuasDikerjakan,
-            persen_selesai: newPersenSelesai,
+            luas_sisa: ba.target_luasan - newLuasDikerjakan,
+            persen_selesai: Math.min(newPersenSelesai, 100),
             status: newStatus,
             updated_at: new Date().toISOString()
           })
           .eq('id', sb.id);
 
-        if (updateError) throw new Error(`Progress update failed: ${updateError.message}`);
+        if (updateError) throw updateError;
       }
 
-      // 3. Insert materials if any
-      if (formData.materials.length > 0) {
-        const materialInserts = formData.materials
-          .filter(m => m.material_id && parseFloat(m.dosis_per_ha) > 0)
-          .map(m => ({
-            transaction_id: transactionId,
-            material_id: m.material_id,
-            dosis_per_ha: parseFloat(m.dosis_per_ha),
-            total_kebutuhan: parseFloat(m.dosis_per_ha) * totalLuasan,
-            satuan: m.satuan
-          }));
-
-        if (materialInserts.length > 0) {
-          const { data: insertedMaterials, error: matError } = await supabase
-            .from('transaction_materials')
-            .insert(materialInserts)
-            .select();
-
-          if (matError) throw new Error(`Material insert failed: ${matError.message}`);
-          insertedMaterialIds = insertedMaterials.map(m => m.id);
-        }
-      }
-
-      // 4. Insert workers
-      if (formData.workerMode === 'manual') {
-        const { data: insertedWorker, error: workerError } = await supabase
-          .from('transaction_workers')
-          .insert({
-            transaction_id: transactionId,
-            worker_id: null,
-            jumlah_pekerja: totalPekerja
-          })
-          .select();
-
-        if (workerError) throw new Error(`Worker insert failed: ${workerError.message}`);
-        insertedWorkerIds = [insertedWorker[0].id];
-      } else {
+      // Step 3: Insert transaction_workers
+      if (formData.workerMode === 'list' && formData.selectedWorkers.length > 0) {
         const workerInserts = formData.selectedWorkers.map(wid => ({
-          transaction_id: transactionId,
-          worker_id: wid,
-          jumlah_pekerja: 1
+          transaction_id: transData.id,
+          worker_id: wid
         }));
 
-        const { data: insertedWorkers, error: workerError } = await supabase
+        const { error: workersError } = await data.supabase
           .from('transaction_workers')
-          .insert(workerInserts)
-          .select();
+          .insert(workerInserts);
 
-        if (workerError) throw new Error(`Worker insert failed: ${workerError.message}`);
-        insertedWorkerIds = insertedWorkers.map(w => w.id);
+        if (workersError) throw workersError;
       }
 
-      alert('✅ Transaksi berhasil disimpan!');
-      
+      // Step 4: Insert activity-specific data
+      if (selectedActivity?.code === 'TANAM') {
+        const { error: tanamError } = await data.supabase
+          .from('transaction_tanam')
+          .insert([{
+            transaction_id: transData.id,
+            varietas: formData.varietas_override || availableBlocks[0]?.varietas || ''
+          }]);
+
+        if (tanamError) throw tanamError;
+      }
+
+      if (selectedActivity?.code === 'PANEN') {
+        const { error: panenError } = await data.supabase
+          .from('transaction_panen')
+          .insert([{
+            transaction_id: transData.id,
+            estimasi_ton: parseFloat(formData.estimasi_ton) || null,
+            actual_ton: parseFloat(formData.actual_ton) || null
+          }]);
+
+        if (panenError) throw panenError;
+      }
+
+      if (selectedActivity?.code === 'WEED_CONTROL') {
+        const materialInserts = formData.materials.map(m => ({
+          transaction_id: transData.id,
+          material_name: m.name,
+          dosis_per_ha: parseFloat(m.dosis),
+          luasan_aplikasi: totalLuasan
+        }));
+
+        const { error: materialsError } = await data.supabase
+          .from('transaction_materials')
+          .insert(materialInserts);
+
+        if (materialsError) throw materialsError;
+      }
+
+      alert(`✅ Transaksi berhasil disimpan!\n\nKode: ${transCode}\nTotal Luasan: ${totalLuasan.toFixed(2)} Ha\nPekerja: ${totalPekerja} orang`);
+
       // Reset form
       setFormData({
         tanggal: new Date().toISOString().split('T')[0],
@@ -425,177 +433,191 @@ export default function TransactionForm({ data, loading, onSuccess }) {
         catatan: ''
       });
 
-      if (onSuccess) onSuccess();
+      // Refresh data
+      await data.fetchAllData();
 
-    } catch (error) {
-      console.error('❌ Transaction error:', error);
+    } catch (err) {
+      console.error('Error submitting transaction:', err);
       
-      // ✅ CRITICAL FIX #4: Rollback on error
-      alert(`❌ Gagal menyimpan: ${error.message}\n\nMelakukan rollback...`);
-
-      try {
-        // Delete in reverse order
-        if (insertedWorkerIds.length > 0) {
-          await supabase.from('transaction_workers').delete().in('id', insertedWorkerIds);
+      // ⭐ CRITICAL FIX #4: Rollback on error
+      if (transactionId) {
+        try {
+          await data.supabase
+            .from('transactions')
+            .delete()
+            .eq('id', transactionId);
+          console.log('Transaction rolled back');
+        } catch (rollbackError) {
+          console.error('Rollback failed:', rollbackError);
         }
-        if (insertedMaterialIds.length > 0) {
-          await supabase.from('transaction_materials').delete().in('id', insertedMaterialIds);
-        }
-        if (insertedBlockIds.length > 0) {
-          await supabase.from('transaction_blocks').delete().in('id', insertedBlockIds);
-        }
-        if (transactionId) {
-          await supabase.from('transactions').delete().eq('id', transactionId);
-        }
-        
-        alert('🔄 Rollback selesai. Silakan coba lagi.');
-      } catch (rollbackError) {
-        console.error('❌ Rollback error:', rollbackError);
-        alert('⚠️ Rollback gagal. Hubungi admin untuk membersihkan data!');
       }
+      
+      alert('❌ Error: ' + err.message);
     } finally {
       setSubmitting(false);
     }
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-7xl mx-auto p-6">
-      <div className="bg-white rounded-lg shadow-lg p-6">
-        <h2 className="text-2xl font-bold mb-6 text-gray-800">📝 Input Transaksi Aktivitas</h2>
+    <div className="max-w-5xl mx-auto space-y-6">
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <h2 className="text-2xl font-bold text-gray-800 mb-6">
+          ➕ Input Transaksi Baru
+        </h2>
 
         <div className="space-y-6">
-          {/* Date and Vendor */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium mb-2">
-                Tanggal <span className="text-red-500">*</span>
-              </label>
+              <label className="block text-sm font-medium mb-2">Tanggal *</label>
               <input
                 type="date"
-                min={minDateStr}
-                max={maxDate}
                 value={formData.tanggal}
                 onChange={(e) => setFormData({...formData, tanggal: e.target.value})}
+                min={(() => {
+                  const minDate = new Date();
+                  minDate.setMonth(minDate.getMonth() - 6);
+                  return minDate.toISOString().split('T')[0];
+                })()}
+                max={new Date().toISOString().split('T')[0]}
                 className="w-full px-4 py-2 border rounded-lg"
                 required
               />
-              <p className="text-xs text-gray-500 mt-1">
-                Maksimal 6 bulan ke belakang
-              </p>
+              <p className="text-xs text-gray-500 mt-1">Maksimal 6 bulan ke belakang</p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2">
-                Vendor <span className="text-red-500">*</span>
-              </label>
+              <label className="block text-sm font-medium mb-2">Aktivitas *</label>
               <select
-                value={formData.vendor_id}
-                onChange={(e) => setFormData({...formData, vendor_id: e.target.value})}
+                value={formData.activity_type_id}
+                onChange={(e) => setFormData({
+                  ...formData, 
+                  activity_type_id: e.target.value,
+                  vendor_id: data.currentUser?.role === 'vendor' ? data.currentUser.vendor_id : '',
+                  selectedBlocks: [],
+                  execution_number: 1,
+                  kondisi: '',
+                  materials: []
+                })}
                 className="w-full px-4 py-2 border rounded-lg"
-                disabled={data.currentUser?.role === 'vendor'}
                 required
               >
-                <option value="">-- Pilih Vendor --</option>
-                {data.vendors.map(vendor => (
-                  <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
+                <option value="">-- Pilih Aktivitas --</option>
+                {data.activityTypes.map(at => (
+                  <option key={at.id} value={at.id}>{at.name}</option>
                 ))}
               </select>
             </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Vendor *</label>
+              {data.currentUser?.role === 'vendor' ? (
+                <input
+                  type="text"
+                  value={data.vendors.find(v => v.id === data.currentUser?.vendor_id)?.name || 'Loading...'}
+                  className="w-full px-4 py-2 border rounded-lg bg-gray-100"
+                  disabled
+                />
+              ) : (
+                <select
+                  value={formData.vendor_id}
+                  onChange={(e) => setFormData({
+                    ...formData, 
+                    vendor_id: e.target.value,
+                    selectedWorkers: [],
+                    workerMode: 'manual',
+                    jumlahPekerja: ''
+                  })}
+                  className="w-full px-4 py-2 border rounded-lg"
+                  required
+                  disabled={!formData.activity_type_id}
+                >
+                  <option value="">-- {formData.activity_type_id ? 'Pilih Vendor' : 'Pilih Aktivitas Dulu'} --</option>
+                  {availableVendors.map(v => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+              )}
+              {formData.activity_type_id && availableVendors.length === 0 && data.currentUser?.role !== 'vendor' && (
+                <p className="text-xs text-orange-600 mt-1">⚠️ Tidak ada vendor yang di-assign untuk aktivitas ini</p>
+              )}
+            </div>
           </div>
 
-          {/* Activity Selection */}
-          {formData.vendor_id && (
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                Aktivitas <span className="text-red-500">*</span>
-              </label>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {data.activityTypes.map(activity => (
-                  <button
-                    key={activity.id}
-                    type="button"
-                    onClick={() => setFormData({
-                      ...formData, 
-                      activity_type_id: activity.id,
-                      selectedBlocks: [],
-                      execution_number: 1,
-                      kondisi: '',
-                      materials: []
-                    })}
-                    className={`p-4 border-2 rounded-lg transition-all ${
-                      formData.activity_type_id === activity.id
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-blue-300'
-                    }`}
-                  >
-                    <div className="text-2xl mb-2">{activity.icon}</div>
-                    <div className="font-semibold text-sm">{activity.name}</div>
-                    <div className="text-xs text-gray-500">{activity.code}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Execution Number for WEEDING */}
           {selectedActivity?.code === 'WEEDING' && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <label className="block text-sm font-medium mb-2">
-                Penyiangan Ke- <span className="text-red-500">*</span>
-              </label>
-              <div className="flex gap-2">
+            <div>
+              <label className="block text-sm font-medium mb-2">Weeding Ke- *</label>
+              <div className="flex gap-3">
                 {[1, 2, 3].map(num => (
-                  <button
-                    key={num}
-                    type="button"
-                    onClick={() => setFormData({...formData, execution_number: num, selectedBlocks: []})}
-                    className={`px-6 py-2 rounded-lg font-semibold ${
-                      formData.execution_number === num
-                        ? 'bg-yellow-500 text-white'
-                        : 'bg-white border border-yellow-300 hover:bg-yellow-100'
-                    }`}
-                  >
-                    Ke-{num}
-                  </button>
+                  <label key={num} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="execution"
+                      checked={formData.execution_number === num}
+                      onChange={() => setFormData({...formData, execution_number: num, selectedBlocks: []})}
+                      className="w-4 h-4"
+                    />
+                    <span>Weeding {num}</span>
+                  </label>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Kondisi for PANEN/PRUNING */}
-          {(selectedActivity?.code === 'PANEN' || selectedActivity?.code === 'PRUNING') && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <label className="block text-sm font-medium mb-2">
-                Kondisi <span className="text-red-500">*</span>
-              </label>
-              <div className="flex gap-2">
-                {['Kering', 'Basah'].map(kondisi => (
-                  <button
-                    key={kondisi}
-                    type="button"
-                    onClick={() => setFormData({...formData, kondisi})}
-                    className={`px-6 py-2 rounded-lg font-semibold ${
-                      formData.kondisi === kondisi
-                        ? 'bg-blue-500 text-white'
-                        : 'bg-white border border-blue-300 hover:bg-blue-100'
-                    }`}
-                  >
-                    {kondisi}
-                  </button>
+          {(selectedActivity?.code === 'KELENTEK' || 
+            selectedActivity?.code === 'WEEDING' || 
+            selectedActivity?.code === 'WEED_CONTROL') && (
+            <div>
+              <label className="block text-sm font-medium mb-2">Kondisi *</label>
+              <div className="flex gap-3">
+                {['ringan', 'sedang', 'berat'].map(k => (
+                  <label key={k} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="kondisi"
+                      checked={formData.kondisi === k}
+                      onChange={() => setFormData({...formData, kondisi: k})}
+                      className="w-4 h-4"
+                    />
+                    <span className="capitalize">{k}</span>
+                  </label>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Block Selection */}
           {formData.activity_type_id && (
             <div className="border-t pt-6">
-              <h3 className="font-semibold text-lg mb-4">
-                📦 Pilih Blok {selectedActivity?.name}
-              </h3>
+              <h3 className="font-semibold text-lg mb-4">🗺️ Pilih Blok (Multiple)</h3>
 
-              {/* Filters */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4 p-4 bg-gray-50 rounded-lg">
+              {/* ⭐ Warning jika tidak ada blok tersedia untuk vendor */}
+              {data.currentUser?.role === 'vendor' && availableBlocks.length === 0 && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                  <p className="text-sm text-yellow-800">
+                    <strong>⚠️ Tidak ada blok tersedia</strong>
+                  </p>
+                  <p className="text-xs text-yellow-700 mt-1">
+                    Kemungkinan penyebab:
+                  </p>
+                  <ul className="list-disc ml-5 text-xs text-yellow-700 mt-1">
+                    <li>Vendor Anda belum di-assign untuk aktivitas <strong>{selectedActivity?.name}</strong></li>
+                    <li>Belum ada blok yang diregistrasi untuk aktivitas ini di section yang Anda assigned</li>
+                    <li>Semua blok sudah completed</li>
+                  </ul>
+                  <p className="text-xs text-yellow-700 mt-2">
+                    Hubungi admin untuk assign vendor Anda ke section + aktivitas yang sesuai.
+                  </p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-3 gap-3 mb-4">
                 <div>
                   <label className="block text-xs font-medium mb-1">Filter Zone</label>
                   <select
@@ -604,12 +626,9 @@ export default function TransactionForm({ data, loading, onSuccess }) {
                     className="w-full px-3 py-2 border rounded text-sm"
                   >
                     <option value="">Semua Zone</option>
-                    {uniqueZones.map(zone => (
-                      <option key={zone} value={zone}>{zone}</option>
-                    ))}
+                    {uniqueZones.map(z => <option key={z} value={z}>{z}</option>)}
                   </select>
                 </div>
-
                 <div>
                   <label className="block text-xs font-medium mb-1">Filter Kategori</label>
                   <select
@@ -618,248 +637,215 @@ export default function TransactionForm({ data, loading, onSuccess }) {
                     className="w-full px-3 py-2 border rounded text-sm"
                   >
                     <option value="">Semua Kategori</option>
-                    {uniqueKategori.map(kat => (
-                      <option key={kat} value={kat}>{kat}</option>
-                    ))}
+                    {uniqueKategori.map(k => <option key={k} value={k}>{k}</option>)}
                   </select>
                 </div>
-
                 <div>
                   <label className="block text-xs font-medium mb-1">Cari Blok</label>
                   <input
                     type="text"
-                    placeholder="Nama atau kode blok..."
                     value={blockFilters.search}
                     onChange={(e) => setBlockFilters({...blockFilters, search: e.target.value})}
+                    placeholder="Nama atau kode..."
                     className="w-full px-3 py-2 border rounded text-sm"
                   />
                 </div>
               </div>
 
-              {/* Filter Summary */}
-              <div className="mb-3 text-sm text-gray-600 bg-blue-50 p-2 rounded">
-                Menampilkan {availableBlocks.length} blok
-                {(blockFilters.zone || blockFilters.kategori || blockFilters.search) && 
-                  <span className="text-blue-600 font-medium"> (dengan filter)</span>
-                }
-              </div>
-
-              {/* Block List */}
-              {availableBlocks.length === 0 ? (
+              {availableBlocks.length === 0 && !data.currentUser?.role === 'vendor' ? (
                 <div className="text-center py-8 bg-yellow-50 border border-yellow-200 rounded-lg">
                   <p className="text-yellow-800">
-                    {formData.activity_type_id 
-                      ? 'Tidak ada blok tersedia untuk aktivitas ini.'
-                      : 'Pilih aktivitas terlebih dahulu.'}
+                    Tidak ada blok tersedia untuk aktivitas ini.
+                    <br/>
+                    <span className="text-sm">Registrasi blok terlebih dahulu di tab "Block Registration"</span>
                   </p>
                 </div>
-              ) : (
-                <div className="space-y-3 max-h-96 overflow-y-auto p-3 bg-gray-50 rounded-lg border">
-                  {availableBlocks.map(ba => {
-                    const isSelected = formData.selectedBlocks.find(b => b.id === ba.id);
-                    const sisaLuasan = ba.luas_total - (ba.luas_dikerjakan || 0);
+              ) : availableBlocks.length > 0 ? (
+                <>
+                  <p className="text-sm text-gray-600 mb-3">
+                    {formData.selectedBlocks.length} blok dipilih dari {availableBlocks.length} tersedia
+                  </p>
 
-                    return (
-                      <div
-                        key={ba.id}
-                        className={`p-4 border-2 rounded-lg transition-all ${
-                          isSelected
-                            ? 'border-green-500 bg-green-50'
-                            : 'border-gray-200 bg-white hover:border-blue-300'
-                        }`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <input
-                            type="checkbox"
-                            checked={!!isSelected}
-                            onChange={() => toggleBlock(ba.id)}
-                            className="mt-1 w-5 h-5"
-                          />
-                          <div className="flex-1">
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <h4 className="font-semibold text-lg">{ba.block_code}</h4>
-                                <p className="text-sm text-gray-600">{ba.block_name}</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-96 overflow-y-auto p-3 bg-gray-50 rounded-lg border">
+                    {availableBlocks.map(ba => {
+                      const isSelected = formData.selectedBlocks.find(b => b.id === ba.id);
+                      
+                      return (
+                        <div
+                          key={ba.id}
+                          className={`border-2 rounded-lg p-3 transition-all ${
+                            isSelected ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:border-blue-300'
+                          }`}
+                        >
+                          <label className="flex items-start gap-3 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={!!isSelected}
+                              onChange={() => toggleBlock(ba.id)}
+                              className="w-5 h-5 mt-1"
+                            />
+                            <div className="flex-1">
+                              <p className="font-semibold">{ba.block_name}</p>
+                              <p className="text-xs text-gray-600">
+                                {ba.block_code} | {ba.block_zone} | {ba.kategori} | {ba.varietas}
+                              </p>
+                              <div className="flex justify-between items-center mt-1 text-xs">
+                                <span>Target: {ba.target_bulan}</span>
+                                <span className="font-semibold text-green-600">Sisa: {ba.luas_sisa} Ha</span>
                               </div>
-                              <div className="text-right">
-                                <p className="text-sm text-gray-600">Progress</p>
-                                <p className="font-bold text-blue-600">
-                                  {ba.persen_selesai?.toFixed(1) || 0}%
-                                </p>
+                              <div className="mt-1">
+                                <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                  <div 
+                                    className="bg-blue-600 h-1.5 rounded-full"
+                                    style={{width: `${Math.min(ba.persen_selesai, 100)}%`}}
+                                  />
+                                </div>
                               </div>
+
+                              {isSelected && (
+                                <div className="mt-3 pt-3 border-t" onClick={(e) => e.stopPropagation()}>
+                                  <label className="block text-xs font-medium mb-1">
+                                    Luasan Dikerjakan (Max: {ba.luas_sisa} Ha) *
+                                  </label>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    max={ba.luas_sisa}
+                                    value={isSelected.luasan}
+                                    onChange={(e) => updateBlockLuasan(ba.id, e.target.value)}
+                                    className="w-full px-3 py-2 border rounded"
+                                    placeholder="0.00"
+                                    required
+                                  />
+                                </div>
+                              )}
                             </div>
-
-                            <div className="mt-2 grid grid-cols-3 gap-2 text-sm">
-                              <div>
-                                <span className="text-gray-600">Zone:</span>
-                                <span className="ml-1 font-medium">{ba.block_zone}</span>
-                              </div>
-                              <div>
-                                <span className="text-gray-600">Total:</span>
-                                <span className="ml-1 font-medium">{ba.luas_total} Ha</span>
-                              </div>
-                              <div>
-                                <span className="text-gray-600">Sisa:</span>
-                                <span className="ml-1 font-medium text-orange-600">
-                                  {sisaLuasan.toFixed(2)} Ha
-                                </span>
-                              </div>
-                            </div>
-
-                            {isSelected && (
-                              <div className="mt-3">
-                                <label className="block text-sm font-medium mb-1">
-                                  Luasan Dikerjakan (Ha) <span className="text-red-500">*</span>
-                                </label>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  min="0.01"
-                                  max={sisaLuasan}
-                                  value={isSelected.luasan}
-                                  onChange={(e) => updateBlockLuasan(ba.id, e.target.value)}
-                                  className="w-full px-3 py-2 border rounded-lg"
-                                  placeholder={`Max: ${sisaLuasan.toFixed(2)} Ha`}
-                                />
-                              </div>
-                            )}
-                          </div>
+                          </label>
                         </div>
+                      );
+                    })}
+                  </div>
+
+                  {formData.selectedBlocks.length > 0 && (
+                    <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="flex justify-between items-center">
+                        <span className="font-semibold">Total Luasan:</span>
+                        <span className="text-2xl font-bold text-green-600">
+                          {totalLuasan.toFixed(2)} Ha
+                        </span>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                    </div>
+                  )}
+                </>
+              ) : null}
             </div>
           )}
 
-          {/* Harvest Specific Fields */}
-          {selectedActivity?.code === 'PANEN' && formData.selectedBlocks.length > 0 && (
-            <div className="border-t pt-6">
-              <h3 className="font-semibold text-lg mb-4">📊 Data Panen</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Estimasi Ton <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    value={formData.estimasi_ton}
-                    onChange={(e) => setFormData({...formData, estimasi_ton: e.target.value})}
-                    className="w-full px-4 py-2 border rounded-lg"
-                    placeholder="0.00"
-                    required
-                  />
-                </div>
+          {/* Rest of the form continues... (TANAM, PANEN, WEED_CONTROL sections) */}
+          {/* Worker selection, materials, etc - keep existing code */}
+          
+          {selectedActivity?.code === 'TANAM' && formData.selectedBlocks.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Varietas (Opsional - Override dari blok)
+              </label>
+              <input
+                type="text"
+                value={formData.varietas_override}
+                onChange={(e) => setFormData({...formData, varietas_override: e.target.value})}
+                className="w-full px-4 py-2 border rounded-lg"
+                placeholder={`Default: ${availableBlocks.find(b => b.id === formData.selectedBlocks[0]?.id)?.varietas || 'N/A'}`}
+              />
+            </div>
+          )}
 
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Actual Ton <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    value={formData.actual_ton}
-                    onChange={(e) => setFormData({...formData, actual_ton: e.target.value})}
-                    className="w-full px-4 py-2 border rounded-lg"
-                    placeholder="0.00"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-2">Varietas Override</label>
-                  <input
-                    type="text"
-                    value={formData.varietas_override}
-                    onChange={(e) => setFormData({...formData, varietas_override: e.target.value})}
-                    className="w-full px-4 py-2 border rounded-lg"
-                    placeholder="Opsional"
-                  />
-                </div>
+          {selectedActivity?.code === 'PANEN' && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Estimasi Ton *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formData.estimasi_ton}
+                  onChange={(e) => setFormData({...formData, estimasi_ton: e.target.value})}
+                  className="w-full px-4 py-2 border rounded-lg"
+                  placeholder="100.00"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Actual Ton (Opsional)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formData.actual_ton}
+                  onChange={(e) => setFormData({...formData, actual_ton: e.target.value})}
+                  className="w-full px-4 py-2 border rounded-lg"
+                  placeholder="Bisa diisi nanti"
+                />
               </div>
             </div>
           )}
 
-          {/* Materials (for applicable activities) */}
-          {selectedActivity && ['SPRAYING', 'FERTILIZING'].includes(selectedActivity.code) && (
+          {selectedActivity?.code === 'WEED_CONTROL' && (
             <div className="border-t pt-6">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="font-semibold text-lg">🧪 Material & Dosis</h3>
+                <h3 className="font-semibold text-lg">🧪 Material Herbisida</h3>
                 <button
                   type="button"
                   onClick={addMaterial}
-                  className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
                 >
-                  ➕ Tambah Material
+                  ➕ Tambah Herbisida
                 </button>
               </div>
 
               {formData.materials.length === 0 ? (
                 <div className="text-center py-6 bg-gray-50 border border-gray-200 rounded-lg">
-                  <p className="text-gray-600">
-                    Belum ada material. Klik "Tambah Material" untuk menambahkan.
-                  </p>
+                  <p className="text-gray-600">Klik "Tambah Herbisida" untuk menambahkan material</p>
                 </div>
               ) : (
                 <div className="space-y-3">
                   {formData.materials.map((mat, idx) => (
-                    <div key={idx} className="grid grid-cols-12 gap-3 p-3 bg-gray-50 border rounded-lg">
-                      <div className="col-span-4">
-                        <label className="block text-xs font-medium mb-1">Material</label>
-                        <select
-                          value={mat.material_id}
-                          onChange={(e) => updateMaterial(idx, 'material_id', e.target.value)}
-                          className="w-full px-3 py-2 border rounded text-sm"
-                        >
-                          <option value="">-- Pilih Material --</option>
-                          {data.materials.map(m => (
-                            <option key={m.id} value={m.id}>
-                              {m.name} ({m.code})
-                            </option>
-                          ))}
-                        </select>
+                    <div key={idx} className="grid grid-cols-12 gap-3 items-start p-3 bg-gray-50 rounded-lg border">
+                      <div className="col-span-5">
+                        <label className="block text-xs font-medium mb-1">Nama Herbisida *</label>
+                        <input
+                          type="text"
+                          value={mat.name}
+                          onChange={(e) => updateMaterial(idx, 'name', e.target.value)}
+                          className="w-full px-3 py-2 border rounded"
+                          placeholder="Round-Up"
+                          list="herbisida-list"
+                          required
+                        />
+                        <datalist id="herbisida-list">
+                          <option value="Round-Up" />
+                          <option value="Gramoxone" />
+                          <option value="Ally" />
+                        </datalist>
                       </div>
-
                       <div className="col-span-3">
-                        <label className="block text-xs font-medium mb-1">Dosis/Ha</label>
+                        <label className="block text-xs font-medium mb-1">Dosis (L/Ha) *</label>
                         <input
                           type="number"
                           step="0.01"
-                          min="0"
-                          value={mat.dosis_per_ha}
-                          onChange={(e) => updateMaterial(idx, 'dosis_per_ha', e.target.value)}
-                          className="w-full px-3 py-2 border rounded text-sm"
-                          placeholder="0.00"
+                          value={mat.dosis}
+                          onChange={(e) => updateMaterial(idx, 'dosis', e.target.value)}
+                          className="w-full px-3 py-2 border rounded"
+                          placeholder="2.5"
+                          required
                         />
                       </div>
-
-                      <div className="col-span-2">
-                        <label className="block text-xs font-medium mb-1">Satuan</label>
-                        <select
-                          value={mat.satuan}
-                          onChange={(e) => updateMaterial(idx, 'satuan', e.target.value)}
-                          className="w-full px-3 py-2 border rounded text-sm"
-                        >
-                          <option value="L">Liter</option>
-                          <option value="Kg">Kg</option>
-                          <option value="Gram">Gram</option>
-                        </select>
-                      </div>
-
-                      <div className="col-span-2">
-                        <label className="block text-xs font-medium mb-1">Total</label>
+                      <div className="col-span-3">
+                        <label className="block text-xs font-medium mb-1">Total Kebutuhan</label>
                         <input
                           type="text"
-                          value={`${((parseFloat(mat.dosis_per_ha) || 0) * totalLuasan).toFixed(2)}`}
+                          value={`${((parseFloat(mat.dosis) || 0) * totalLuasan).toFixed(2)} L`}
                           className="w-full px-3 py-2 bg-gray-100 border rounded text-sm font-semibold text-blue-600"
                           disabled
                         />
                       </div>
-
                       <div className="col-span-1 flex items-end">
                         <button
                           type="button"
@@ -876,7 +862,6 @@ export default function TransactionForm({ data, loading, onSuccess }) {
             </div>
           )}
 
-          {/* Workers */}
           {formData.vendor_id && (
             <div className="border-t pt-6">
               <h3 className="font-semibold text-lg mb-4">👷 Data Pekerja</h3>
@@ -902,21 +887,19 @@ export default function TransactionForm({ data, loading, onSuccess }) {
                       onChange={() => setFormData({...formData, workerMode: 'list', jumlahPekerja: ''})}
                       className="w-4 h-4"
                     />
-                    <span>Pilih dari Daftar</span>
+                    <span>Pilih dari Daftar (Auto Count)</span>
                   </label>
                 </div>
               </div>
 
               {formData.workerMode === 'manual' && (
                 <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Jumlah Pekerja <span className="text-red-500">*</span>
-                  </label>
+                  <label className="block text-sm font-medium mb-2">Jumlah Pekerja *</label>
                   <input
                     type="number"
                     min="1"
                     value={formData.jumlahPekerja}
-                    onChange={(e) => setFormData({...formData, jumlahPekerja: e.target.value})}
+                      onChange={(e) => setFormData({...formData, jumlahPekerja: e.target.value})}
                     className="w-full px-4 py-2 border rounded-lg"
                     placeholder="Contoh: 25"
                     required
@@ -924,6 +907,7 @@ export default function TransactionForm({ data, loading, onSuccess }) {
                 </div>
               )}
 
+              {/* List Mode */}
               {formData.workerMode === 'list' && (
                 <div>
                   {availableWorkers.length === 0 ? (
@@ -931,7 +915,7 @@ export default function TransactionForm({ data, loading, onSuccess }) {
                       <p className="text-yellow-800">
                         Vendor ini belum memiliki pekerja terdaftar.
                         <br/>
-                        <span className="text-sm">Tambahkan pekerja di tab "Master Data".</span>
+                        <span className="text-sm">Tambahkan pekerja di tab "Master Data" terlebih dahulu.</span>
                       </p>
                     </div>
                   ) : (
@@ -973,6 +957,7 @@ export default function TransactionForm({ data, loading, onSuccess }) {
                 </div>
               )}
 
+              {/* Total Pekerja Display */}
               <div className="mt-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
                 <div className="flex justify-between items-center">
                   <span className="font-semibold">Total Pekerja:</span>
@@ -989,15 +974,15 @@ export default function TransactionForm({ data, loading, onSuccess }) {
             </div>
           )}
 
-          {/* Notes */}
+          {/* Catatan */}
           <div>
-            <label className="block text-sm font-medium mb-2">Catatan</label>
+            <label className="block text-sm font-medium mb-2">Catatan (Opsional)</label>
             <textarea
               value={formData.catatan}
               onChange={(e) => setFormData({...formData, catatan: e.target.value})}
               className="w-full px-4 py-2 border rounded-lg"
               rows={3}
-              placeholder="Catatan tambahan..."
+              placeholder="Catatan tambahan tentang transaksi ini..."
             />
           </div>
 
@@ -1026,7 +1011,7 @@ export default function TransactionForm({ data, loading, onSuccess }) {
             </div>
           )}
 
-          {/* Submit */}
+          {/* Submit Button */}
           <div className="flex gap-3 pt-4 border-t">
             <button
               type="button"
@@ -1039,10 +1024,10 @@ export default function TransactionForm({ data, loading, onSuccess }) {
             <button
               type="button"
               onClick={() => {
-                if (confirm('❓ Reset form?')) {
+                if (confirm('❓ Reset form? Semua data akan hilang.')) {
                   setFormData({
                     tanggal: new Date().toISOString().split('T')[0],
-                    vendor_id: data.currentUser?.role === 'vendor' ? data.currentUser.vendor_id : '',
+                    vendor_id: '',
                     activity_type_id: '',
                     execution_number: 1,
                     kondisi: '',
@@ -1058,8 +1043,7 @@ export default function TransactionForm({ data, loading, onSuccess }) {
                   });
                 }
               }}
-              disabled={submitting}
-              className="px-6 bg-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-400 disabled:opacity-50"
+              className="px-6 bg-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-400"
             >
               🔄 Reset
             </button>
