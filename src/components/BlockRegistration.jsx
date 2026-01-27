@@ -1,5 +1,5 @@
 // src/components/BlockRegistration.jsx - FIXED VERSION
-// Tambahkan warning jika activityTypes kosong
+// Admin bisa pilih section, Section Head auto-fill
 
 import { useState, useMemo } from 'react';
 import Modal from './Modal';
@@ -7,6 +7,7 @@ import Modal from './Modal';
 export default function BlockRegistration({ data, loading }) {
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({
+    section_id: '', // ⭐ NEW: For admin to select
     activity_type_id: '',
     target_bulan: '',
     execution_number: 1,
@@ -18,6 +19,22 @@ export default function BlockRegistration({ data, loading }) {
 
   // Check if no activities available
   const hasNoActivities = data.activityTypes.length === 0;
+
+  // ⭐ For admin: Get available activities per section
+  const availableActivitiesForSection = useMemo(() => {
+    if (data.currentUser?.role !== 'admin' || !formData.section_id) {
+      return data.activityTypes;
+    }
+
+    // Filter activities assigned to selected section
+    const sectionActivityIds = data.sectionActivities
+      ?.filter(sa => sa.section_id === formData.section_id)
+      .map(sa => sa.activity_type_id) || [];
+
+    return data.activityTypes.filter(at => 
+      sectionActivityIds.includes(at.id)
+    );
+  }, [data.activityTypes, data.sectionActivities, formData.section_id, data.currentUser]);
 
   // Filter available blocks
   const availableBlocks = useMemo(() => {
@@ -62,15 +79,27 @@ export default function BlockRegistration({ data, loading }) {
       return;
     }
 
+    // ⭐ Validation: Admin must select section
+    if (data.currentUser?.role === 'admin' && !formData.section_id) {
+      alert('⚠️ Pilih section terlebih dahulu!');
+      return;
+    }
+
     try {
       const activity = data.activityTypes.find(a => a.id === formData.activity_type_id);
       
+      // ⭐ Determine section_id based on role
+      const targetSectionId = data.currentUser?.role === 'admin' 
+        ? formData.section_id 
+        : data.currentUser?.section_id;
+
       for (const blockId of formData.selected_blocks) {
         const block = data.blocks.find(b => b.id === blockId);
         
         const registrationData = {
           block_id: blockId,
           activity_type_id: formData.activity_type_id,
+          section_id: targetSectionId, // ⭐ FIX: Always include section_id
           kategori: block.kategori || '',
           varietas: block.varietas || '',
           target_bulan: formData.target_bulan,
@@ -81,9 +110,14 @@ export default function BlockRegistration({ data, loading }) {
         await data.addBlockActivity(registrationData);
       }
 
-      alert(`✅ Berhasil registrasi ${formData.selected_blocks.length} blok untuk ${activity.name}!`);
+      const sectionName = data.currentUser?.role === 'admin'
+        ? data.sections.find(s => s.id === targetSectionId)?.name
+        : data.currentUser?.section_name;
+
+      alert(`✅ Berhasil registrasi ${formData.selected_blocks.length} blok untuk ${activity.name} di ${sectionName}!`);
       
       setFormData({
+        section_id: '',
         activity_type_id: '',
         target_bulan: '',
         execution_number: 1,
@@ -91,6 +125,7 @@ export default function BlockRegistration({ data, loading }) {
       });
       setShowModal(false);
     } catch (err) {
+      console.error('Error submitting:', err);
       alert('❌ Error: ' + err.message);
     }
   };
@@ -150,6 +185,11 @@ export default function BlockRegistration({ data, loading }) {
         <p className="text-sm text-blue-800">
           <strong>📋 Block Registration & Status:</strong> Registrasikan blok untuk aktivitas tertentu 
           dan monitor progress real-time dari transaksi yang masuk.
+          {data.currentUser?.role === 'admin' && (
+            <span className="block mt-1 text-xs">
+              ℹ️ Sebagai admin, Anda bisa registrasi blok untuk section manapun.
+            </span>
+          )}
           {data.currentUser?.role !== 'admin' && (
             <span className="block mt-1 text-xs">
               ℹ️ Anda hanya bisa registrasi blok untuk aktivitas yang di-assign ke section Anda.
@@ -281,6 +321,31 @@ export default function BlockRegistration({ data, loading }) {
         title="📋 Registrasi Blok untuk Aktivitas"
       >
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* ⭐ NEW: Section Selection (Admin Only) */}
+          {data.currentUser?.role === 'admin' && (
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Section * <span className="text-xs text-gray-500">(Admin Only)</span>
+              </label>
+              <select
+                value={formData.section_id}
+                onChange={(e) => setFormData({
+                  ...formData, 
+                  section_id: e.target.value,
+                  activity_type_id: '', // Reset activity when section changes
+                  selected_blocks: []
+                })}
+                className="w-full px-4 py-2 border rounded-lg"
+                required
+              >
+                <option value="">-- Pilih Section --</option>
+                {data.sections.map(s => (
+                  <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Aktivitas Selection */}
           <div>
             <label className="block text-sm font-medium mb-2">Aktivitas *</label>
@@ -289,12 +354,22 @@ export default function BlockRegistration({ data, loading }) {
               onChange={(e) => setFormData({...formData, activity_type_id: e.target.value})}
               className="w-full px-4 py-2 border rounded-lg"
               required
+              disabled={data.currentUser?.role === 'admin' && !formData.section_id}
             >
-              <option value="">-- Pilih Aktivitas --</option>
-              {data.activityTypes.map(at => (
+              <option value="">
+                {data.currentUser?.role === 'admin' && !formData.section_id 
+                  ? '-- Pilih Section Terlebih Dahulu --'
+                  : '-- Pilih Aktivitas --'}
+              </option>
+              {availableActivitiesForSection.map(at => (
                 <option key={at.id} value={at.id}>{at.name}</option>
               ))}
             </select>
+            {data.currentUser?.role === 'admin' && formData.section_id && availableActivitiesForSection.length === 0 && (
+              <p className="text-xs text-red-600 mt-1">
+                ⚠️ Section ini belum di-assign aktivitas apapun. Assign dulu di "Section Activities".
+              </p>
+            )}
           </div>
 
           {/* Execution Number (for Weeding) */}
@@ -423,6 +498,7 @@ export default function BlockRegistration({ data, loading }) {
               onClick={() => {
                 setShowModal(false);
                 setFormData({
+                  section_id: '',
                   activity_type_id: '',
                   target_bulan: '',
                   execution_number: 1,
