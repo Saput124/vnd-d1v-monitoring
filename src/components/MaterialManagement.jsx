@@ -1,148 +1,207 @@
 // src/components/MaterialManagement.jsx
-import { useState, useMemo } from 'react';
+// Master Data Management untuk Materials (Herbisida, Pupuk, Pestisida, dll)
 
-export default function MaterialManagement({ data, loading }) {
+import { useState, useEffect } from 'react';
+import { supabase } from '../utils/supabase';
+import Modal from './Modal';
+
+export default function MaterialManagement() {
+  const [materials, setMaterials] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [editData, setEditData] = useState(null);
+  const [filterCategory, setFilterCategory] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+
   const [formData, setFormData] = useState({
     code: '',
     name: '',
-    category: '',
-    unit: '',
+    category: 'herbisida',
+    unit: 'liter',
     description: '',
     manufacturer: '',
+    safety_notes: '',
     active: true
   });
 
-  const [editingId, setEditingId] = useState(null);
-  const [filters, setFilters] = useState({
-    category: '',
-    search: '',
-    showInactive: false
-  });
+  const categories = [
+    { value: 'herbisida', label: '🌿 Herbisida', color: 'bg-green-100 text-green-800' },
+    { value: 'pupuk', label: '🌾 Pupuk', color: 'bg-yellow-100 text-yellow-800' },
+    { value: 'pestisida', label: '🐛 Pestisida', color: 'bg-red-100 text-red-800' },
+    { value: 'alat', label: '🔧 Alat', color: 'bg-blue-100 text-blue-800' },
+    { value: 'lainnya', label: '📦 Lainnya', color: 'bg-gray-100 text-gray-800' }
+  ];
 
-  const categories = ['herbisida', 'pupuk', 'pestisida', 'alat', 'lainnya'];
-  const units = ['liter', 'kg', 'gram', 'botol', 'unit'];
+  const units = ['liter', 'kg', 'gram', 'botol', 'karung', 'unit', 'pack'];
 
-  const filteredMaterials = useMemo(() => {
-    let filtered = data.materials || [];
-
-    if (!filters.showInactive) {
-      filtered = filtered.filter(m => m.active);
-    }
-
-    if (filters.category) {
-      filtered = filtered.filter(m => m.category === filters.category);
-    }
-
-    if (filters.search) {
-      const search = filters.search.toLowerCase();
-      filtered = filtered.filter(m =>
-        m.code.toLowerCase().includes(search) ||
-        m.name.toLowerCase().includes(search) ||
-        (m.manufacturer && m.manufacturer.toLowerCase().includes(search))
-      );
-    }
-
-    return filtered;
-  }, [data.materials, filters]);
-
-  const handleSubmit = async () => {
-    if (!formData.code || !formData.name || !formData.category || !formData.unit) {
-      alert('❌ Lengkapi semua field yang wajib!');
-      return;
-    }
-
+  const fetchMaterials = async () => {
+    setLoading(true);
     try {
-      if (editingId) {
-        // Update existing material
-        const { error } = await data.supabase
-          .from('materials')
-          .update({
-            ...formData,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', editingId);
+      const { data, error } = await supabase
+        .from('materials')
+        .select('*')
+        .order('category', { ascending: true })
+        .order('name', { ascending: true });
 
-        if (error) throw error;
-        alert('✅ Material berhasil diupdate!');
-      } else {
-        // Insert new material
-        const { error } = await data.supabase
-          .from('materials')
-          .insert([formData]);
-
-        if (error) throw error;
-        alert('✅ Material berhasil ditambahkan!');
-      }
-
-      // Reset form
-      setFormData({
-        code: '',
-        name: '',
-        category: '',
-        unit: '',
-        description: '',
-        manufacturer: '',
-        active: true
-      });
-      setEditingId(null);
-
-      // Refresh data
-      await data.fetchAllData();
-
+      if (error) throw error;
+      setMaterials(data || []);
     } catch (err) {
-      console.error('Error saving material:', err);
-      alert('❌ Error: ' + err.message);
+      console.error('Error fetching materials:', err);
+      alert('❌ Error loading materials: ' + err.message);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
+    fetchMaterials();
+  }, []);
+
+  const handleNew = () => {
+    setFormData({
+      code: '',
+      name: '',
+      category: 'herbisida',
+      unit: 'liter',
+      description: '',
+      manufacturer: '',
+      safety_notes: '',
+      active: true
+    });
+    setEditData(null);
+    setShowModal(true);
   };
 
   const handleEdit = (material) => {
     setFormData({
       code: material.code,
       name: material.name,
-      category: material.category,
+      category: material.category || 'herbisida',
       unit: material.unit,
       description: material.description || '',
       manufacturer: material.manufacturer || '',
+      safety_notes: material.safety_notes || '',
       active: material.active
     });
-    setEditingId(material.id);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setEditData(material);
+    setShowModal(true);
   };
 
-  const handleToggleActive = async (materialId, currentStatus) => {
+  const handleSave = async () => {
     try {
-      const { error } = await data.supabase
-        .from('materials')
-        .update({
-          active: !currentStatus,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', materialId);
+      // Validation
+      if (!formData.code || !formData.name || !formData.unit) {
+        alert('❌ Kode, Nama, dan Satuan harus diisi!');
+        return;
+      }
 
-      if (error) throw error;
+      setLoading(true);
 
-      await data.fetchAllData();
+      const dataToSave = {
+        code: formData.code.toUpperCase().trim(),
+        name: formData.name.trim(),
+        category: formData.category,
+        unit: formData.unit,
+        description: formData.description.trim() || null,
+        manufacturer: formData.manufacturer.trim() || null,
+        safety_notes: formData.safety_notes.trim() || null,
+        active: formData.active,
+        updated_at: new Date().toISOString()
+      };
 
+      if (editData) {
+        // Update
+        const { error } = await supabase
+          .from('materials')
+          .update(dataToSave)
+          .eq('id', editData.id);
+
+        if (error) throw error;
+        alert('✅ Material berhasil diupdate!');
+      } else {
+        // Insert
+        const { error } = await supabase
+          .from('materials')
+          .insert([dataToSave]);
+
+        if (error) throw error;
+        alert('✅ Material berhasil ditambahkan!');
+      }
+
+      setShowModal(false);
+      fetchMaterials();
     } catch (err) {
-      console.error('Error toggling material status:', err);
+      console.error('Error saving material:', err);
       alert('❌ Error: ' + err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleCancel = () => {
-    setFormData({
-      code: '',
-      name: '',
-      category: '',
-      unit: '',
-      description: '',
-      manufacturer: '',
-      active: true
-    });
-    setEditingId(null);
+  const handleDelete = async (id, name) => {
+    if (!confirm(`❓ Yakin hapus material "${name}"?\n\n⚠️ Material yang sudah digunakan dalam transaksi tidak bisa dihapus!`)) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const { error } = await supabase
+        .from('materials')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      alert('✅ Material berhasil dihapus!');
+      fetchMaterials();
+    } catch (err) {
+      console.error('Error deleting material:', err);
+      alert('❌ Error: ' + err.message + '\n\nKemungkinan material ini sudah digunakan dalam transaksi.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  if (loading) {
+  const handleToggleActive = async (id, currentStatus, name) => {
+    try {
+      setLoading(true);
+      const { error } = await supabase
+        .from('materials')
+        .update({ active: !currentStatus, updated_at: new Date().toISOString() })
+        .eq('id', id);
+
+      if (error) throw error;
+      alert(`✅ Material "${name}" ${!currentStatus ? 'diaktifkan' : 'dinonaktifkan'}!`);
+      fetchMaterials();
+    } catch (err) {
+      console.error('Error toggling active:', err);
+      alert('❌ Error: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Filter materials
+  const filteredMaterials = materials.filter(m => {
+    const matchCategory = filterCategory === '' || m.category === filterCategory;
+    const matchSearch = searchQuery === '' || 
+      m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      m.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (m.manufacturer && m.manufacturer.toLowerCase().includes(searchQuery.toLowerCase()));
+    
+    return matchCategory && matchSearch;
+  });
+
+  // Group by category
+  const materialsByCategory = categories.map(cat => ({
+    ...cat,
+    items: filteredMaterials.filter(m => m.category === cat.value)
+  }));
+
+  const getCategoryInfo = (category) => {
+    return categories.find(c => c.value === category) || categories[4]; // default to 'lainnya'
+  };
+
+  if (loading && materials.length === 0) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
@@ -151,25 +210,200 @@ export default function MaterialManagement({ data, loading }) {
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
-      {/* Form Section */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-2xl font-bold text-gray-800 mb-6">
-          {editingId ? '✏️ Edit Material' : '➕ Tambah Material Baru'}
-        </h2>
+    <div className="space-y-6">
+      {/* Info Box */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <p className="text-sm text-blue-800">
+          <strong>📦 Material Management:</strong> Kelola master data untuk semua material yang digunakan dalam aktivitas 
+          (herbisida, pupuk, pestisida, alat, dll). Material ini akan digunakan saat input transaksi untuk aktivitas 
+          yang membutuhkan material.
+        </p>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Header & Actions */}
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
           <div>
-            <label className="block text-sm font-medium mb-2">Kode Material *</label>
+            <h3 className="text-xl font-bold text-gray-800">
+              📦 Material Master Data
+            </h3>
+            <p className="text-sm text-gray-600 mt-1">
+              Total: {materials.length} material | Aktif: {materials.filter(m => m.active).length}
+            </p>
+          </div>
+          <button
+            onClick={handleNew}
+            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 font-semibold whitespace-nowrap"
+          >
+            ➕ Tambah Material
+          </button>
+        </div>
+
+        {/* Filters */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div>
+            <label className="block text-sm font-medium mb-2">Filter Kategori</label>
+            <select
+              value={filterCategory}
+              onChange={(e) => setFilterCategory(e.target.value)}
+              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Semua Kategori</option>
+              {categories.map(cat => (
+                <option key={cat.value} value={cat.value}>{cat.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Cari Material</label>
             <input
               type="text"
-              value={formData.code}
-              onChange={(e) => setFormData({...formData, code: e.target.value.toUpperCase()})}
-              placeholder="e.g., HERB-001"
-              className="w-full px-4 py-2 border rounded-lg"
-              disabled={editingId !== null}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Nama, kode, atau manufaktur..."
+              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
             />
-            <p className="text-xs text-gray-500 mt-1">Format: CATEGORY-NUMBER (e.g., HERB-001)</p>
+          </div>
+        </div>
+
+        {/* Materials List Grouped by Category */}
+        {filteredMaterials.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="text-6xl mb-4">📦</div>
+            <p className="text-gray-500 text-lg">Tidak ada material yang sesuai filter</p>
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="mt-4 text-blue-600 hover:underline"
+              >
+                Reset pencarian
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {materialsByCategory.map(category => {
+              if (category.items.length === 0) return null;
+              
+              return (
+                <div key={category.value} className="border rounded-lg overflow-hidden">
+                  <div className={`${category.color} px-4 py-2 font-semibold`}>
+                    {category.label} ({category.items.length})
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 border-b">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-semibold">Kode</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold">Nama Material</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold">Satuan</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold">Manufaktur</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold">Deskripsi</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold">Status</th>
+                          <th className="px-4 py-3 text-left text-xs font-semibold">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {category.items.map((material, idx) => (
+                          <tr key={material.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                            <td className="px-4 py-3">
+                              <span className="font-mono text-xs bg-gray-200 px-2 py-1 rounded">
+                                {material.code}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 font-semibold">{material.name}</td>
+                            <td className="px-4 py-3">
+                              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                {material.unit}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-600">
+                              {material.manufacturer || '-'}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">
+                              {material.description || '-'}
+                            </td>
+                            <td className="px-4 py-3">
+                              <button
+                                onClick={() => handleToggleActive(material.id, material.active, material.name)}
+                                className={`px-2 py-1 rounded text-xs font-semibold ${
+                                  material.active
+                                    ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                                    : 'bg-red-100 text-red-800 hover:bg-red-200'
+                                }`}
+                              >
+                                {material.active ? '✓ Active' : '✗ Inactive'}
+                              </button>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => handleEdit(material)}
+                                  className="text-blue-600 hover:text-blue-800 font-semibold"
+                                  title="Edit"
+                                >
+                                  ✏️
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(material.id, material.name)}
+                                  className="text-red-600 hover:text-red-800 font-semibold"
+                                  title="Delete"
+                                >
+                                  🗑️
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Modal Form */}
+      <Modal
+        show={showModal}
+        onClose={() => setShowModal(false)}
+        title={editData ? '✏️ Edit Material' : '➕ Tambah Material Baru'}
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Kode Material * <span className="text-xs text-gray-500">(e.g., HERB-001)</span>
+              </label>
+              <input
+                type="text"
+                value={formData.code}
+                onChange={(e) => setFormData({...formData, code: e.target.value.toUpperCase()})}
+                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="HERB-001"
+                required
+                disabled={editData !== null}
+              />
+              {editData && (
+                <p className="text-xs text-gray-500 mt-1">Kode tidak bisa diubah</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Kategori *</label>
+              <select
+                value={formData.category}
+                onChange={(e) => setFormData({...formData, category: e.target.value})}
+                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                required
+              >
+                {categories.map(cat => (
+                  <option key={cat.value} value={cat.value}>{cat.label}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div>
@@ -178,222 +412,97 @@ export default function MaterialManagement({ data, loading }) {
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({...formData, name: e.target.value})}
+              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
               placeholder="e.g., Roundup 480 SL"
-              className="w-full px-4 py-2 border rounded-lg"
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">Satuan *</label>
+              <select
+                value={formData.unit}
+                onChange={(e) => setFormData({...formData, unit: e.target.value})}
+                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                required
+              >
+                {units.map(unit => (
+                  <option key={unit} value={unit}>{unit}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Manufaktur</label>
+              <input
+                type="text"
+                value={formData.manufacturer}
+                onChange={(e) => setFormData({...formData, manufacturer: e.target.value})}
+                className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                placeholder="e.g., Monsanto"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Deskripsi</label>
+            <textarea
+              value={formData.description}
+              onChange={(e) => setFormData({...formData, description: e.target.value})}
+              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              rows="2"
+              placeholder="Deskripsi singkat material..."
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">Kategori *</label>
-            <select
-              value={formData.category}
-              onChange={(e) => setFormData({...formData, category: e.target.value})}
-              className="w-full px-4 py-2 border rounded-lg"
-            >
-              <option value="">-- Pilih Kategori --</option>
-              {categories.map(cat => (
-                <option key={cat} value={cat}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">Satuan *</label>
-            <select
-              value={formData.unit}
-              onChange={(e) => setFormData({...formData, unit: e.target.value})}
-              className="w-full px-4 py-2 border rounded-lg"
-            >
-              <option value="">-- Pilih Satuan --</option>
-              {units.map(unit => (
-                <option key={unit} value={unit}>{unit}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">Manufacturer</label>
-            <input
-              type="text"
-              value={formData.manufacturer}
-              onChange={(e) => setFormData({...formData, manufacturer: e.target.value})}
-              placeholder="e.g., Bayer, Syngenta"
-              className="w-full px-4 py-2 border rounded-lg"
+            <label className="block text-sm font-medium mb-2">
+              Catatan Keamanan 
+              <span className="text-xs text-gray-500 ml-2">(untuk bahan kimia)</span>
+            </label>
+            <textarea
+              value={formData.safety_notes}
+              onChange={(e) => setFormData({...formData, safety_notes: e.target.value})}
+              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              rows="2"
+              placeholder="e.g., Gunakan APD lengkap. Hindari kontak dengan kulit..."
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">Status</label>
-            <label className="flex items-center gap-2 cursor-pointer px-4 py-2 border rounded-lg">
+            <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={formData.active}
                 onChange={(e) => setFormData({...formData, active: e.target.checked})}
                 className="w-4 h-4"
               />
-              <span className="text-sm">Aktif</span>
+              <span className="font-medium">Material Aktif</span>
+              <span className="text-sm text-gray-500">(dapat digunakan dalam transaksi)</span>
             </label>
           </div>
 
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium mb-2">Deskripsi</label>
-            <textarea
-              value={formData.description}
-              onChange={(e) => setFormData({...formData, description: e.target.value})}
-              placeholder="Informasi tambahan tentang material..."
-              rows={3}
-              className="w-full px-4 py-2 border rounded-lg"
-            />
-          </div>
-        </div>
-
-        <div className="flex gap-3 mt-6">
-          <button
-            onClick={handleSubmit}
-            className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-blue-700 transition"
-          >
-            {editingId ? '💾 Update Material' : '➕ Tambah Material'}
-          </button>
-          {editingId && (
+          <div className="flex gap-3 pt-4 border-t">
             <button
-              onClick={handleCancel}
-              className="px-6 py-3 border-2 border-gray-300 rounded-lg font-semibold hover:bg-gray-50 transition"
+              type="button"
+              onClick={handleSave}
+              disabled={loading}
+              className="flex-1 bg-gradient-to-r from-blue-600 to-green-600 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-green-700 disabled:opacity-50"
             >
-              ❌ Batal
+              {loading ? '⏳ Menyimpan...' : '💾 Simpan'}
             </button>
-          )}
-        </div>
-      </div>
-
-      {/* Filter Section */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h3 className="text-xl font-bold text-gray-800 mb-4">🔍 Filter Material</h3>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">Kategori</label>
-            <select
-              value={filters.category}
-              onChange={(e) => setFilters({...filters, category: e.target.value})}
-              className="w-full px-3 py-2 border rounded-lg"
+            <button
+              type="button"
+              onClick={() => setShowModal(false)}
+              disabled={loading}
+              className="px-6 bg-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-400"
             >
-              <option value="">Semua Kategori</option>
-              {categories.map(cat => (
-                <option key={cat} value={cat}>{cat.charAt(0).toUpperCase() + cat.slice(1)}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">Cari</label>
-            <input
-              type="text"
-              value={filters.search}
-              onChange={(e) => setFilters({...filters, search: e.target.value})}
-              placeholder="Cari kode, nama, atau manufacturer..."
-              className="w-full px-3 py-2 border rounded-lg"
-            />
-          </div>
-
-          <div className="flex items-end">
-            <label className="flex items-center gap-2 cursor-pointer px-3 py-2 border rounded-lg">
-              <input
-                type="checkbox"
-                checked={filters.showInactive}
-                onChange={(e) => setFilters({...filters, showInactive: e.target.checked})}
-                className="w-4 h-4"
-              />
-              <span className="text-sm">Tampilkan yang non-aktif</span>
-            </label>
+              Batal
+            </button>
           </div>
         </div>
-
-        <div className="text-sm text-gray-600 mt-4">
-          Menampilkan <span className="font-semibold text-blue-600">{filteredMaterials.length}</span> dari <span className="font-semibold">{data.materials?.length || 0}</span> material
-        </div>
-      </div>
-
-      {/* Materials List */}
-      <div className="bg-white rounded-lg shadow-md overflow-hidden">
-        <div className="p-6 border-b">
-          <h3 className="text-xl font-bold text-gray-800">📦 Daftar Material</h3>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kode</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama Material</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kategori</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Satuan</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Manufacturer</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredMaterials.length === 0 ? (
-                <tr>
-                  <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
-                    Tidak ada material ditemukan
-                  </td>
-                </tr>
-              ) : (
-                filteredMaterials.map(material => (
-                  <tr key={material.id} className={material.active ? '' : 'bg-gray-50 opacity-60'}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {material.code}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">
-                      {material.name}
-                      {material.description && (
-                        <p className="text-xs text-gray-500 mt-1">{material.description}</p>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <span className="px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
-                        {material.category}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {material.unit}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {material.manufacturer || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {material.active ? (
-                        <span className="px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">
-                          Aktif
-                        </span>
-                      ) : (
-                        <span className="px-2 py-1 rounded-full text-xs bg-red-100 text-red-800">
-                          Non-aktif
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                      <button
-                        onClick={() => handleEdit(material)}
-                        className="text-blue-600 hover:text-blue-900"
-                      >
-                        ✏️ Edit
-                      </button>
-                      <button
-                        onClick={() => handleToggleActive(material.id, material.active)}
-                        className={material.active ? "text-red-600 hover:text-red-900" : "text-green-600 hover:text-green-900"}
-                      >
-                        {material.active ? '🚫 Non-aktifkan' : '✅ Aktifkan'}
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      </Modal>
     </div>
   );
 }
