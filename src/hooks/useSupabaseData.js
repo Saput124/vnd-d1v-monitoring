@@ -28,7 +28,6 @@ export function useSupabaseData() {
         .from('sections')
         .select('*')
         .order('name');
-
       if (sectionsError) throw sectionsError;
 
       /* ================= VENDORS ================= */
@@ -36,7 +35,6 @@ export function useSupabaseData() {
         .from('vendors')
         .select('*')
         .order('name');
-
       if (vendorsError) throw vendorsError;
 
       /* ================= VENDOR ASSIGNMENTS (NEW) ================= */
@@ -44,7 +42,6 @@ export function useSupabaseData() {
         .from('vendor_assignments')
         .select('*')
         .order('created_at', { ascending: false });
-
       if (vaError) throw vaError;
 
       /* ================= ACTIVITY TYPES ================= */
@@ -56,19 +53,17 @@ export function useSupabaseData() {
           .select('*')
           .eq('active', true)
           .order('name');
-
         if (error) throw error;
         activityTypesData = data || [];
 
       } else if (['section_head', 'supervisor'].includes(currentUser?.role)) {
-        const { data: sectionActivities, error } = await supabase
+        const { data: sa, error } = await supabase
           .from('section_activities')
           .select('activity_type_id')
           .eq('section_id', currentUser.section_id);
-
         if (error) throw error;
 
-        const ids = sectionActivities.map(sa => sa.activity_type_id);
+        const ids = sa.map(x => x.activity_type_id);
         if (ids.length) {
           const { data, error } = await supabase
             .from('activity_types')
@@ -76,29 +71,26 @@ export function useSupabaseData() {
             .in('id', ids)
             .eq('active', true)
             .order('name');
-
           if (error) throw error;
           activityTypesData = data || [];
         }
 
       } else if (currentUser?.role === 'vendor') {
-        const { data: vendorSections, error } = await supabase
+        const { data: vs, error } = await supabase
           .from('vendor_sections')
           .select('section_id')
           .eq('vendor_id', currentUser.vendor_id);
-
         if (error) throw error;
 
-        const sectionIds = vendorSections.map(vs => vs.section_id);
+        const sectionIds = vs.map(v => v.section_id);
         if (sectionIds.length) {
-          const { data: sectionActivities, error } = await supabase
+          const { data: sa, error } = await supabase
             .from('section_activities')
             .select('activity_type_id')
             .in('section_id', sectionIds);
-
           if (error) throw error;
 
-          const ids = [...new Set(sectionActivities.map(sa => sa.activity_type_id))];
+          const ids = [...new Set(sa.map(x => x.activity_type_id))];
           if (ids.length) {
             const { data, error } = await supabase
               .from('activity_types')
@@ -106,7 +98,6 @@ export function useSupabaseData() {
               .in('id', ids)
               .eq('active', true)
               .order('name');
-
             if (error) throw error;
             activityTypesData = data || [];
           }
@@ -118,7 +109,6 @@ export function useSupabaseData() {
         .from('blocks')
         .select('*')
         .order('name');
-
       if (blocksError) throw blocksError;
 
       /* ================= BLOCK ACTIVITIES ================= */
@@ -130,12 +120,12 @@ export function useSupabaseData() {
       if (['section_head', 'supervisor'].includes(currentUser?.role)) {
         blockActivitiesQuery = blockActivitiesQuery.eq('section_id', currentUser.section_id);
       } else if (currentUser?.role === 'vendor') {
-        const { data: vendorSections } = await supabase
+        const { data: vs } = await supabase
           .from('vendor_sections')
           .select('section_id')
           .eq('vendor_id', currentUser.vendor_id);
 
-        const ids = vendorSections.map(vs => vs.section_id);
+        const ids = vs.map(v => v.section_id);
         blockActivitiesQuery = ids.length
           ? blockActivitiesQuery.in('section_id', ids)
           : blockActivitiesQuery.eq('id', '00000000-0000-0000-0000-000000000000');
@@ -172,9 +162,8 @@ export function useSupabaseData() {
       const { data: workersData, error: workersError } = await workersQuery;
       if (workersError) throw workersError;
 
-      /* ================= FINAL STATE ================= */
-      setData(prev => ({
-        ...prev,
+      /* ================= SET STATE + HELPERS ================= */
+      setData({
         blocks: blocksData || [],
         activityTypes: activityTypesData || [],
         blockActivities: blockActivitiesData || [],
@@ -185,8 +174,137 @@ export function useSupabaseData() {
         workers: workersData || [],
         loading: false,
         currentUser,
-        supabase
-      }));
+        supabase,
+
+        /* ===== VENDOR ===== */
+        addVendor: async payload => {
+          const { data, error } = await supabase.from('vendors').insert([payload]).select().single();
+          if (error) throw error;
+          await fetchAllData();
+          return data;
+        },
+        updateVendor: async (id, payload) => {
+          const { error } = await supabase.from('vendors').update(payload).eq('id', id);
+          if (error) throw error;
+          await fetchAllData();
+        },
+        deleteVendor: async id => {
+          const { error } = await supabase.from('vendors').delete().eq('id', id);
+          if (error) throw error;
+          await fetchAllData();
+        },
+
+        /* ===== BLOCK ===== */
+        addBlock: async payload => {
+          const { data, error } = await supabase.from('blocks').insert([payload]).select().single();
+          if (error) throw error;
+          await fetchAllData();
+          return data;
+        },
+        updateBlock: async (id, payload) => {
+          const { error } = await supabase.from('blocks').update(payload).eq('id', id);
+          if (error) throw error;
+          await fetchAllData();
+        },
+        deleteBlock: async id => {
+          const { error } = await supabase.from('blocks').delete().eq('id', id);
+          if (error) throw error;
+          await fetchAllData();
+        },
+
+        /* ===== WORKER ===== */
+        addWorker: async payload => {
+          const { data, error } = await supabase.from('workers').insert([payload]).select().single();
+          if (error) throw error;
+          await fetchAllData();
+          return data;
+        },
+        updateWorker: async (id, payload) => {
+          const { error } = await supabase.from('workers').update(payload).eq('id', id);
+          if (error) throw error;
+          await fetchAllData();
+        },
+        deleteWorker: async id => {
+          const { error } = await supabase.from('workers').delete().eq('id', id);
+          if (error) throw error;
+          await fetchAllData();
+        },
+
+        /* ===== ACTIVITY TYPE ===== */
+        addActivityType: async payload => {
+          const { data, error } = await supabase.from('activity_types').insert([payload]).select().single();
+          if (error) throw error;
+          await fetchAllData();
+          return data;
+        },
+        updateActivityType: async (id, payload) => {
+          const { error } = await supabase.from('activity_types').update(payload).eq('id', id);
+          if (error) throw error;
+          await fetchAllData();
+        },
+        deleteActivityType: async id => {
+          const { error } = await supabase.from('activity_types').delete().eq('id', id);
+          if (error) throw error;
+          await fetchAllData();
+        },
+
+        /* ===== BLOCK ACTIVITY ===== */
+        addBlockActivity: async payload => {
+          const block = blocksData.find(b => b.id === payload.block_id);
+
+          const dataToInsert = {
+            ...payload,
+            section_id:
+              currentUser.role === 'admin'
+                ? payload.section_id
+                : currentUser.section_id,
+            vendor_id:
+              currentUser.role === 'vendor'
+                ? currentUser.vendor_id
+                : null,
+            kategori: payload.kategori || block?.kategori || '',
+            varietas: payload.varietas || block?.varietas || '',
+            luas_dikerjakan: 0,
+            persen_selesai: 0,
+            luas_sisa: payload.target_luasan
+          };
+
+          const { data, error } = await supabase
+            .from('block_activities')
+            .insert([dataToInsert])
+            .select()
+            .single();
+
+          if (error) throw error;
+          await fetchAllData();
+          return data;
+        },
+        deleteBlockActivity: async id => {
+          const { error } = await supabase.from('block_activities').delete().eq('id', id);
+          if (error) throw error;
+          await fetchAllData();
+        },
+
+        /* ===== VENDOR ASSIGNMENT (NEW) ===== */
+        addVendorAssignment: async payload => {
+          const { data, error } = await supabase
+            .from('vendor_assignments')
+            .insert([payload])
+            .select()
+            .single();
+          if (error) throw error;
+          await fetchAllData();
+          return data;
+        },
+        deleteVendorAssignment: async id => {
+          const { error } = await supabase
+            .from('vendor_assignments')
+            .delete()
+            .eq('id', id);
+          if (error) throw error;
+          await fetchAllData();
+        }
+      });
 
     } catch (err) {
       console.error('Error fetching data:', err);
