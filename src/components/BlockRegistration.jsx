@@ -22,18 +22,24 @@ export default function BlockRegistration({ data, loading }) {
 
   // ⭐ For admin: Get available activities per section
   const availableActivitiesForSection = useMemo(() => {
-    if (data.currentUser?.role !== 'admin' || !formData.section_id) {
-      return data.activityTypes;
+    if (data.currentUser?.role === 'admin') {
+      // If no section selected yet, return empty
+      if (!formData.section_id) {
+        return [];
+      }
+      
+      // Filter activities assigned to selected section
+      const sectionActivityIds = data.sectionActivities
+        ?.filter(sa => sa.section_id === formData.section_id)
+        .map(sa => sa.activity_type_id) || [];
+
+      return data.activityTypes.filter(at => 
+        sectionActivityIds.includes(at.id)
+      );
     }
 
-    // Filter activities assigned to selected section
-    const sectionActivityIds = data.sectionActivities
-      ?.filter(sa => sa.section_id === formData.section_id)
-      .map(sa => sa.activity_type_id) || [];
-
-    return data.activityTypes.filter(at => 
-      sectionActivityIds.includes(at.id)
-    );
+    // For section_head/supervisor, return their assigned activities
+    return data.activityTypes;
   }, [data.activityTypes, data.sectionActivities, formData.section_id, data.currentUser]);
 
   // Filter available blocks
