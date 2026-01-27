@@ -1,3 +1,6 @@
+// src/components/TransactionForm.jsx - FIXED VERSION
+// Filter blok berdasarkan activity + vendor assignment
+
 import { useState, useMemo, useEffect } from 'react';
   
 export default function TransactionForm({ data, loading }) {
@@ -38,15 +41,45 @@ export default function TransactionForm({ data, loading }) {
     return data.activityTypes.find(a => a.id === formData.activity_type_id);
   }, [formData.activity_type_id, data.activityTypes]);
 
+  // ⭐ FIXED: Filter blok by activity + vendor assignment
   const availableBlocks = useMemo(() => {
     if (!formData.activity_type_id) return [];
 
+    // Start: Filter by selected activity & not completed
     let filtered = data.blockActivities.filter(ba => 
       ba.activity_type_id === formData.activity_type_id &&
       ba.status !== 'completed' &&
       ba.status !== 'cancelled'
     );
 
+    // ⭐ VENDOR: Filter by assigned sections + activities
+    if (data.currentUser?.role === 'vendor') {
+      // Get vendor's assignments for this specific activity
+      const assignedSectionIds = data.vendorAssignments
+        ?.filter(va => 
+          va.vendor_id === data.currentUser.vendor_id &&
+          va.activity_type_id === formData.activity_type_id
+        )
+        .map(va => va.section_id) || [];
+
+      if (assignedSectionIds.length === 0) {
+        // Vendor not assigned to any section for this activity
+        return [];
+      }
+
+      filtered = filtered.filter(ba => 
+        assignedSectionIds.includes(ba.section_id)
+      );
+    }
+
+    // ⭐ SECTION STAFF: Filter by own section only
+    if (['section_head', 'supervisor'].includes(data.currentUser?.role)) {
+      filtered = filtered.filter(ba => 
+        ba.section_id === data.currentUser.section_id
+      );
+    }
+
+    // Apply zone filter
     if (blockFilters.zone) {
       filtered = filtered.filter(ba => {
         const block = data.blocks.find(b => b.id === ba.block_id);
@@ -54,10 +87,12 @@ export default function TransactionForm({ data, loading }) {
       });
     }
 
+    // Apply kategori filter
     if (blockFilters.kategori) {
       filtered = filtered.filter(ba => ba.kategori === blockFilters.kategori);
     }
 
+    // Apply search filter
     if (blockFilters.search) {
       const search = blockFilters.search.toLowerCase();
       filtered = filtered.filter(ba => {
@@ -67,6 +102,7 @@ export default function TransactionForm({ data, loading }) {
       });
     }
 
+    // Map to include block details
     return filtered.map(ba => {
       const block = data.blocks.find(b => b.id === ba.block_id);
       return {
@@ -77,7 +113,15 @@ export default function TransactionForm({ data, loading }) {
         block_luas_total: block?.luas_total
       };
     });
-  }, [formData.activity_type_id, formData.execution_number, data.blockActivities, data.blocks, blockFilters]);
+  }, [
+    formData.activity_type_id, 
+    formData.execution_number, 
+    data.blockActivities, 
+    data.blocks, 
+    blockFilters,
+    data.currentUser,
+    data.vendorAssignments // ⭐ Added dependency
+  ]);
 
   const availableWorkers = useMemo(() => {
     if (!formData.vendor_id) return [];
@@ -214,6 +258,11 @@ export default function TransactionForm({ data, loading }) {
 
     try {
       const transCode = `TRX-${Date.now()}`;
+      
+      // Get section_id from first selected block
+      const firstBlockActivity = availableBlocks.find(ba => ba.id === formData.selectedBlocks[0].id);
+      const sectionId = firstBlockActivity.section_id;
+
       const { data: transData, error: transError } = await data.supabase
         .from('transactions')
         .insert([{
@@ -221,6 +270,7 @@ export default function TransactionForm({ data, loading }) {
           tanggal: formData.tanggal,
           vendor_id: formData.vendor_id,
           activity_type_id: formData.activity_type_id,
+          section_id: sectionId, // ⭐ Get from block_activity
           jumlah_pekerja: totalPekerja,
           kondisi: formData.kondisi || null,
           catatan: formData.catatan || null,
@@ -448,6 +498,26 @@ export default function TransactionForm({ data, loading }) {
             <div className="border-t pt-6">
               <h3 className="font-semibold text-lg mb-4">🗺️ Pilih Blok (Multiple)</h3>
 
+              {/* ⭐ Warning jika tidak ada blok tersedia untuk vendor */}
+              {data.currentUser?.role === 'vendor' && availableBlocks.length === 0 && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                  <p className="text-sm text-yellow-800">
+                    <strong>⚠️ Tidak ada blok tersedia</strong>
+                  </p>
+                  <p className="text-xs text-yellow-700 mt-1">
+                    Kemungkinan penyebab:
+                  </p>
+                  <ul className="list-disc ml-5 text-xs text-yellow-700 mt-1">
+                    <li>Vendor Anda belum di-assign untuk aktivitas <strong>{selectedActivity?.name}</strong></li>
+                    <li>Belum ada blok yang diregistrasi untuk aktivitas ini di section yang Anda assigned</li>
+                    <li>Semua blok sudah completed</li>
+                  </ul>
+                  <p className="text-xs text-yellow-700 mt-2">
+                    Hubungi admin untuk assign vendor Anda ke section + aktivitas yang sesuai.
+                  </p>
+                </div>
+              )}
+
               <div className="grid grid-cols-3 gap-3 mb-4">
                 <div>
                   <label className="block text-xs font-medium mb-1">Filter Zone</label>
@@ -483,7 +553,7 @@ export default function TransactionForm({ data, loading }) {
                 </div>
               </div>
 
-              {availableBlocks.length === 0 ? (
+              {availableBlocks.length === 0 && !data.currentUser?.role === 'vendor' ? (
                 <div className="text-center py-8 bg-yellow-50 border border-yellow-200 rounded-lg">
                   <p className="text-yellow-800">
                     Tidak ada blok tersedia untuk aktivitas ini.
@@ -491,7 +561,7 @@ export default function TransactionForm({ data, loading }) {
                     <span className="text-sm">Registrasi blok terlebih dahulu di tab "Block Registration"</span>
                   </p>
                 </div>
-              ) : (
+              ) : availableBlocks.length > 0 ? (
                 <>
                   <p className="text-sm text-gray-600 mb-3">
                     {formData.selectedBlocks.length} blok dipilih dari {availableBlocks.length} tersedia
@@ -568,10 +638,13 @@ export default function TransactionForm({ data, loading }) {
                     </div>
                   )}
                 </>
-              )}
+              ) : null}
             </div>
           )}
 
+          {/* Rest of the form continues... (TANAM, PANEN, WEED_CONTROL sections) */}
+          {/* Worker selection, materials, etc - keep existing code */}
+          
           {selectedActivity?.code === 'TANAM' && formData.selectedBlocks.length > 0 && (
             <div>
               <label className="block text-sm font-medium mb-2">
