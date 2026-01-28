@@ -565,16 +565,25 @@ export default function MasterData({ data, loading }) {
           </div>
           
           <div>
-            <label className="block text-sm font-medium mb-2">Kategori</label>
-            <select name="kategori" defaultValue={editData?.kategori || ''} required className="w-full px-4 py-2 border rounded-lg">
-              <option value="">-- Pilih Kategori --</option>
-              <option value="PC">PC (Plant Cane)</option>
-              <option value="RC">RC (Ratoon Cane)</option>
-              <option value="R1">R1 (Ratoon 1)</option>
-              <option value="R2">R2 (Ratoon 2)</option>
-              <option value="R3">R3 (Ratoon 3)</option>
-              <option value="Bibit">Bibit</option>
+            <label className="block text-sm font-medium mb-2">
+              Kategori Tanaman *
+            </label>
+            <select 
+              name="kategori" 
+              defaultValue={editData?.kategori || 'PC'} 
+              className="w-full px-4 py-2 border rounded-lg" 
+              required
+            >
+              <option value="PC">PC (Plant Cane - Tanaman Baru)</option>
+              <option value="RC">RC (Ratoon Cane - Keprasan)</option>
+              <option value="R1">R1 (Ratoon 1 - Keprasan ke-1)</option>
+              <option value="R2">R2 (Ratoon 2 - Keprasan ke-2)</option>
+              <option value="R3">R3 (Ratoon 3 - Keprasan ke-3)</option>
+              <option value="Bibit">Bibit (Seedling/Nursery)</option>
             </select>
+            <p className="text-xs text-gray-500 mt-1">
+              💡 Untuk material: R1/R2/R3/RC = Ratoon dosage, PC = Plant Cane dosage
+            </p>
           </div>
 
           <div>
