@@ -1,5 +1,5 @@
 // src/components/BlockRegistration.jsx - FIXED VERSION
-// Admin bisa pilih section, Section Head auto-fill
+// Admin bisa pilih section,Section Head auto-fill
 
 import { useState, useMemo } from 'react';
 import Modal from './Modal';
