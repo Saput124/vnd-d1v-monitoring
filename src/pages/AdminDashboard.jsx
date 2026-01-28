@@ -54,11 +54,7 @@ export default function AdminDashboard() {
     },
     master: {
       label: '🗂️ Master Data',
-      tabs: [
-        { id: 'blocks', label: '🗺️ Blocks' },
-        { id: 'vendors', label: '👥 Vendors' },
-        { id: 'workers', label: '👷 Workers' }
-      ]
+      tabs: [] // ⭐ No sub-tabs - MasterData has its own internal tabs
     },
     management: {
       label: '⚙️ Management',
