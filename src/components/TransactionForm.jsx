@@ -2,6 +2,7 @@
 // Filter blok berdasarkan activity + vendor assignment
 
 import { useState, useMemo, useEffect } from 'react';
+import MaterialSelector from './MaterialSelector';
   
 export default function TransactionForm({ data, loading }) {
   const [formData, setFormData] = useState({
@@ -17,7 +18,9 @@ export default function TransactionForm({ data, loading }) {
     estimasi_ton: '',
     actual_ton: '',
     varietas_override: '',
-    materials: [],
+    materials: [], // ⭐ NEW: Selected materials from MaterialSelector
+    stage_id: null, // ⭐ NEW: Optional stage
+    alternative_option: null, // ⭐ NEW: Optional alternative
     catatan: ''
   });
 
@@ -231,6 +234,13 @@ export default function TransactionForm({ data, loading }) {
     return formData.selectedBlocks.reduce((sum, b) => sum + (parseFloat(b.luasan) || 0), 0);
   }, [formData.selectedBlocks]);
 
+  // ⭐ NEW: Get kategori from selected blocks (assume all same kategori)
+  const kategori = useMemo(() => {
+    if (formData.selectedBlocks.length === 0) return 'PC';
+    const firstBlockActivity = availableBlocks.find(ba => ba.id === formData.selectedBlocks[0].id);
+    return firstBlockActivity?.kategori || 'PC';
+  }, [formData.selectedBlocks, availableBlocks]);
+
   const totalPekerja = useMemo(() => {
     if (formData.workerMode === 'manual') {
       return parseInt(formData.jumlahPekerja) || 0;
@@ -389,6 +399,26 @@ export default function TransactionForm({ data, loading }) {
         if (materialsError) throw materialsError;
       }
 
+      // ⭐ NEW: Save materials from MaterialSelector (for any activity with requires_material = true)
+      if (selectedActivity?.requires_material && formData.materials.length > 0) {
+        const transactionMaterials = formData.materials.map(mat => ({
+          transaction_id: transData.id,
+          material_id: mat.material_id,
+          material_name: mat.material_name, // For backward compatibility
+          dosis_per_ha: mat.dosis_per_ha,
+          dosis: mat.dosis_per_ha, // For backward compatibility
+          luasan_aplikasi: totalLuasan,
+          quantity_actual: parseFloat(mat.quantity),
+          notes: mat.notes || null
+        }));
+        
+        const { error: materialsError } = await data.supabase
+          .from('transaction_materials')
+          .insert(transactionMaterials);
+          
+        if (materialsError) throw materialsError;
+      }
+
       alert(`✅ Transaksi berhasil disimpan!\n\nKode: ${transCode}\nTotal Luasan: ${totalLuasan.toFixed(2)} Ha\nPekerja: ${totalPekerja} orang`);
 
       setFormData({
@@ -405,6 +435,8 @@ export default function TransactionForm({ data, loading }) {
         actual_ton: '',
         varietas_override: '',
         materials: [],
+        stage_id: null,
+        alternative_option: null,
         catatan: ''
       });
 
@@ -830,6 +862,36 @@ export default function TransactionForm({ data, loading }) {
             </div>
           )}
 
+          {/* ⭐ NEW: MaterialSelector for activities with requires_material = true */}
+          {selectedActivity?.requires_material && formData.selectedBlocks.length > 0 && (
+            <div className="border-t pt-6">
+              <MaterialSelector
+                activityTypeId={formData.activity_type_id}
+                kategori={kategori}
+                totalLuasan={totalLuasan}
+                onMaterialsChange={(materials) => {
+                  setFormData(prev => ({
+                    ...prev,
+                    materials: materials
+                  }));
+                }}
+              />
+            </div>
+          )}
+                          type="button"
+                          onClick={() => removeMaterial(idx)}
+                          className="w-full py-2 text-red-600 hover:bg-red-50 rounded"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {formData.vendor_id && (
             <div className="border-t pt-6">
               <h3 className="font-semibold text-lg mb-4">👷 Data Pekerja</h3>
@@ -1007,6 +1069,8 @@ export default function TransactionForm({ data, loading }) {
                     actual_ton: '',
                     varietas_override: '',
                     materials: [],
+                    stage_id: null,
+                    alternative_option: null,
                     catatan: ''
                   });
                 }
