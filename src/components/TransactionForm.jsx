@@ -423,13 +423,12 @@ export default function TransactionForm({ data, loading }) {
       if (selectedActivity?.requires_material && formData.materials.length > 0) {
         const transactionMaterials = formData.materials.map(mat => ({
           transaction_id: transData.id,
-          material_id: mat.material_id,
-          material_name: mat.material_name, // For backward compatibility
-          dosis_per_ha: mat.dosis_per_ha,
-          dosis: mat.dosis_per_ha, // For backward compatibility
-          luasan_aplikasi: totalLuasan,
-          quantity_actual: parseFloat(mat.quantity),
-          notes: mat.notes || null
+          material_id: mat.material_id,        // ✓ FK to materials table
+          dosis_per_ha: mat.dosis_per_ha,     // ✓ Correct column name
+          luasan_aplikasi: totalLuasan,        // ✓ Correct column name
+          unit: mat.unit,                      // ✓ Required field
+          notes: mat.notes || null,
+          // total_used auto-calculates: dosis_per_ha * luasan_aplikasi
         }));
         
         const { error: materialsError } = await data.supabase
