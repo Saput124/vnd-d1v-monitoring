@@ -234,8 +234,6 @@ export default function AdminDashboard() {
     </ol>
   </div>
 </footer>
-        </div>
-      </footer>
 
     </div>
   );
