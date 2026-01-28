@@ -1,4 +1,4 @@
-// src/components/MasterData.jsx - FIXED WITH SECTION
+// src/components/MasterData.jsx - WITH MATERIALS TAB
 
 import { useState, useEffect } from 'react';
 import Modal from './Modal';
@@ -261,10 +261,10 @@ export default function MasterData({ data, loading }) {
     <div className="space-y-6">
       {/* Tabs */}
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
-        <div className="flex border-b">
+        <div className="flex border-b overflow-x-auto">
           <button
             onClick={() => setActiveTab('vendors')}
-            className={`flex-1 px-6 py-4 font-semibold transition-colors ${
+            className={`flex-1 px-6 py-4 font-semibold transition-colors whitespace-nowrap ${
               activeTab === 'vendors'
                 ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
                 : 'text-gray-600 hover:bg-gray-50'
@@ -273,8 +273,18 @@ export default function MasterData({ data, loading }) {
             👥 Vendors ({data.vendors.length})
           </button>
           <button
+            onClick={() => setActiveTab('materials')}
+            className={`flex-1 px-6 py-4 font-semibold transition-colors whitespace-nowrap ${
+              activeTab === 'materials'
+                ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
+                : 'text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            📦 Materials
+          </button>
+          <button
             onClick={() => setActiveTab('blocks')}
-            className={`flex-1 px-6 py-4 font-semibold transition-colors ${
+            className={`flex-1 px-6 py-4 font-semibold transition-colors whitespace-nowrap ${
               activeTab === 'blocks'
                 ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
                 : 'text-gray-600 hover:bg-gray-50'
@@ -284,7 +294,7 @@ export default function MasterData({ data, loading }) {
           </button>
           <button
             onClick={() => setActiveTab('workers')}
-            className={`flex-1 px-6 py-4 font-semibold transition-colors ${
+            className={`flex-1 px-6 py-4 font-semibold transition-colors whitespace-nowrap ${
               activeTab === 'workers'
                 ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
                 : 'text-gray-600 hover:bg-gray-50'
@@ -350,6 +360,11 @@ export default function MasterData({ data, loading }) {
             </table>
           </div>
         </div>
+      )}
+
+      {/* ⭐ Materials Tab - NEW */}
+      {activeTab === 'materials' && (
+        <MaterialManagement />
       )}
 
       {/* Blocks Tab - WITH SECTION COLUMN */}
