@@ -12,6 +12,8 @@ import SectionActivityManagement from '../components/SectionActivityManagement';
 import VendorAssignmentManagement from '../components/VendorAssignmentManagement';
 import UserManagement from '../components/UserManagement';
 import MaterialManagement from '../components/MaterialManagement';
+import ActivityStageManagement from '../components/ActivityStageManagement';
+import ActivityMaterialConfiguration from '../components/ActivityMaterialConfiguration';
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
@@ -22,7 +24,7 @@ export default function AdminDashboard() {
     transaction: 'input',
     registration: 'blocks',
     assignment: 'section_activities',
-    master: 'blocks',
+    master: 'general',
     management: 'users'
   });
 
@@ -53,9 +55,14 @@ export default function AdminDashboard() {
       ]
     },
     master: {
-      label: '🗂️ Master Data',
-      tabs: [] // ⭐ No sub-tabs - MasterData has its own internal tabs
-    },
+  label: '🗂️ Master Data',
+  tabs: [
+    { id: 'general', label: '📋 General Data' },
+    { id: 'materials', label: '📦 Materials' },
+    { id: 'stages', label: '🎯 Activity Stages' },
+    { id: 'material_config', label: '⚙️ Material Config' }
+  ]
+},
     management: {
       label: '⚙️ Management',
       tabs: [
@@ -192,8 +199,21 @@ export default function AdminDashboard() {
         )}
 
         {activeTab === 'master' && (
-          <MasterData data={data} loading={data.loading} />
-        )}
+  <>
+    {activeSubTab.master === 'general' && (
+      <MasterData data={data} loading={data.loading} />
+    )}
+    {activeSubTab.master === 'materials' && (
+      <MaterialManagement />
+    )}
+    {activeSubTab.master === 'stages' && (
+      <ActivityStageManagement />
+    )}
+    {activeSubTab.master === 'material_config' && (
+      <ActivityMaterialConfiguration />
+    )}
+  </>
+)}
 
         {activeTab === 'management' && (
           <UserManagement />
@@ -202,13 +222,18 @@ export default function AdminDashboard() {
 
       {/* ================= FOOTER ================= */}
       <footer className="bg-white border-t mt-12 py-6">
-        <div className="container mx-auto px-4 text-center text-sm text-gray-600">
-          <p><strong>ℹ️ Important:</strong></p>
-          <ol className="mt-2 space-y-1 text-xs">
-            <li>1️⃣ Tambahkan <strong>Activity Types</strong> di Activity Management</li>
-            <li>2️⃣ Assign activity ke section di <strong>Section Activities</strong></li>
-            <li>3️⃣ Baru bisa registrasi block & input transaksi</li>
-          </ol>
+  <div className="container mx-auto px-4 text-center text-sm text-gray-600">
+    <p><strong>ℹ️ Setup Guide:</strong></p>
+    <ol className="mt-2 space-y-1 text-xs">
+      <li>1️⃣ Tambahkan <strong>Activity Types</strong> di Activity Management</li>
+      <li>2️⃣ Tambahkan <strong>Activity Stages</strong> di Master Data → Activity Stages</li>
+      <li>3️⃣ Tambahkan <strong>Materials</strong> di Master Data → Materials</li>
+      <li>4️⃣ Konfigurasi <strong>Material Requirements</strong> di Master Data → Material Config</li>
+      <li>5️⃣ Assign activity ke section di <strong>Section Activities</strong></li>
+      <li>6️⃣ Registrasi blocks & mulai input transaksi</li>
+    </ol>
+  </div>
+</footer>
         </div>
       </footer>
 
