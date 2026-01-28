@@ -271,10 +271,15 @@ export default function BlockRegistration({ data, loading }) {
                       <td className="px-3 py-3">{ba.kategori}</td>
                       <td className="px-3 py-3">{ba.varietas}</td>
                       <td className="px-3 py-3">
-                        <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs font-semibold">
-                          {activity?.name}
-                          {ba.execution_number > 1 && ` ${ba.execution_number}`}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs font-semibold">
+                            {activity?.name}
+                            {ba.execution_number > 1 && ` ${ba.execution_number}`}
+                          </span>
+                          {activity?.requires_material && (
+                            <span className="text-xs" title="Memerlukan material">📦</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-3">{ba.target_bulan}</td>
                       <td className="px-3 py-3 font-semibold">{ba.target_luasan} Ha</td>
@@ -368,13 +373,26 @@ export default function BlockRegistration({ data, loading }) {
                   : '-- Pilih Aktivitas --'}
               </option>
               {availableActivitiesForSection.map(at => (
-                <option key={at.id} value={at.id}>{at.name}</option>
+                <option key={at.id} value={at.id}>
+                  {at.name} {at.requires_material ? '📦' : ''}
+                </option>
               ))}
             </select>
             {data.currentUser?.role === 'admin' && formData.section_id && availableActivitiesForSection.length === 0 && (
               <p className="text-xs text-red-600 mt-1">
                 ⚠️ Section ini belum di-assign aktivitas apapun. Assign dulu di "Section Activities".
               </p>
+            )}
+            
+            {/* ⭐ NEW: Material Requirements Info */}
+            {formData.activity_type_id && 
+             data.activityTypes.find(a => a.id === formData.activity_type_id)?.requires_material && (
+              <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>📦 Info Material:</strong> Aktivitas ini memerlukan material (pupuk/herbisida/pestisida).
+                  Material akan dipilih saat input transaksi berdasarkan kategori blok (PC/RC).
+                </p>
+              </div>
             )}
           </div>
 
