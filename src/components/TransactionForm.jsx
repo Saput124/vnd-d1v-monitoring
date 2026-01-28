@@ -38,6 +38,46 @@ export default function TransactionForm({ data, loading }) {
   }, [data.currentUser]);
 
   const selectedActivity = useMemo(() => {
+// ⭐ NEW: Auto-detect kategori dari selected blocks
+  const detectedKategori = useMemo(() => {
+    if (formData.selectedBlocks.length === 0) return null;
+
+    // Get kategori from all selected blocks
+    const blockKategoris = formData.selectedBlocks.map(blockActivityId => {
+      const blockActivity = data.blockActivities.find(ba => ba.id === blockActivityId);
+      if (!blockActivity) return null;
+      
+      const block = data.blocks.find(b => b.id === blockActivity.block_id);
+      return block?.kategori;
+    }).filter(Boolean);
+
+    // Check if all blocks have same kategori
+    const uniqueKategoris = [...new Set(blockKategoris)];
+    
+    if (uniqueKategoris.length === 0) return null;
+    if (uniqueKategoris.length > 1) {
+      // Different kategoris detected - this is an error
+      return 'MIXED';
+    }
+
+    return uniqueKategoris[0]; // 'PC' or 'RC'
+  }, [formData.selectedBlocks, data.blockActivities, data.blocks]);
+
+  // ⭐ Show validation error if mixed kategoris
+  useEffect(() => {
+    if (detectedKategori === 'MIXED') {
+      alert('⚠️ ERROR: Semua block harus memiliki kategori yang sama!\n\n' +
+            'Anda tidak bisa memilih Plant Cane (PC) dan Ratoon Cane (RC) bersamaan dalam satu transaksi.\n\n' +
+            'Silakan pilih ulang blocks dengan kategori yang sama.');
+      
+      // Clear the last selected block
+      setFormData(prev => ({
+        ...prev,
+        selectedBlocks: prev.selectedBlocks.slice(0, -1)
+      }));
+    }
+  }, [detectedKategori]);
+
     return data.activityTypes.find(a => a.id === formData.activity_type_id);
   }, [formData.activity_type_id, data.activityTypes]);
 
