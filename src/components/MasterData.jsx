@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Modal from './Modal';
+import MaterialManagement from './MaterialManagement';
 
 export default function MasterData({ data, loading }) {
   const [activeTab, setActiveTab] = useState('vendors');
