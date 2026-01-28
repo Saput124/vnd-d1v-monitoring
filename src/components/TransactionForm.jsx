@@ -2,7 +2,6 @@
 // Filter blok berdasarkan activity + vendor assignment
 
 import { useState, useMemo, useEffect } from 'react';
-import MaterialSelector from './MaterialSelector';
   
 export default function TransactionForm({ data, loading }) {
   const [formData, setFormData] = useState({
@@ -18,9 +17,7 @@ export default function TransactionForm({ data, loading }) {
     estimasi_ton: '',
     actual_ton: '',
     varietas_override: '',
-    materials: [], // ⭐ NEW: Selected materials from MaterialSelector
-    stage_id: null, // ⭐ NEW: Optional stage
-    alternative_option: null, // ⭐ NEW: Optional alternative
+    materials: [],
     catatan: ''
   });
 
@@ -234,33 +231,6 @@ export default function TransactionForm({ data, loading }) {
     return formData.selectedBlocks.reduce((sum, b) => sum + (parseFloat(b.luasan) || 0), 0);
   }, [formData.selectedBlocks]);
 
-  // ⭐ Helper function: Map detailed kategori to material type
-  const getMaterialType = (kategori) => {
-    // R1, R2, R3, RC all map to RC for material purposes
-    if (['RC', 'R1', 'R2', 'R3'].includes(kategori)) {
-      return 'RC';
-    }
-    // PC maps to PC
-    if (kategori === 'PC') {
-      return 'PC';
-    }
-    // Bibit defaults to PC (but should be confirmed in BlockRegistration)
-    if (kategori === 'Bibit') {
-      return 'PC';
-    }
-    // Fallback to PC
-    return 'PC';
-  };
-
-  // ⭐ NEW: Get material type from selected blocks (maps R1/R2/R3 → RC)
-  const kategori = useMemo(() => {
-    if (formData.selectedBlocks.length === 0) return 'PC';
-    const firstBlockActivity = availableBlocks.find(ba => ba.id === formData.selectedBlocks[0].id);
-    const detailedKategori = firstBlockActivity?.kategori || 'PC';
-    // Map to material type for MaterialSelector
-    return getMaterialType(detailedKategori);
-  }, [formData.selectedBlocks, availableBlocks]);
-
   const totalPekerja = useMemo(() => {
     if (formData.workerMode === 'manual') {
       return parseInt(formData.jumlahPekerja) || 0;
@@ -419,25 +389,6 @@ export default function TransactionForm({ data, loading }) {
         if (materialsError) throw materialsError;
       }
 
-      // ⭐ NEW: Save materials from MaterialSelector (for any activity with requires_material = true)
-      if (selectedActivity?.requires_material && formData.materials.length > 0) {
-        const transactionMaterials = formData.materials.map(mat => ({
-          transaction_id: transData.id,
-          material_id: mat.material_id,        // ✓ FK to materials table
-          dosis_per_ha: mat.dosis_per_ha,     // ✓ Correct column name
-          luasan_aplikasi: totalLuasan,        // ✓ Correct column name
-          unit: mat.unit,                      // ✓ Required field
-          notes: mat.notes || null,
-          // total_used auto-calculates: dosis_per_ha * luasan_aplikasi
-        }));
-        
-        const { error: materialsError } = await data.supabase
-          .from('transaction_materials')
-          .insert(transactionMaterials);
-          
-        if (materialsError) throw materialsError;
-      }
-
       alert(`✅ Transaksi berhasil disimpan!\n\nKode: ${transCode}\nTotal Luasan: ${totalLuasan.toFixed(2)} Ha\nPekerja: ${totalPekerja} orang`);
 
       setFormData({
@@ -454,8 +405,6 @@ export default function TransactionForm({ data, loading }) {
         actual_ton: '',
         varietas_override: '',
         materials: [],
-        stage_id: null,
-        alternative_option: null,
         catatan: ''
       });
 
@@ -881,48 +830,6 @@ export default function TransactionForm({ data, loading }) {
             </div>
           )}
 
-          {/* ⭐ NEW: MaterialSelector for activities with requires_material = true */}
-          {selectedActivity?.requires_material && formData.selectedBlocks.length > 0 && (
-            <div className="border-t pt-6">
-              {/* Show kategori mapping info if detailed kategori is used */}
-              {(() => {
-                const firstBlockActivity = availableBlocks.find(ba => ba.id === formData.selectedBlocks[0].id);
-                const detailedKategori = firstBlockActivity?.kategori;
-                const materialType = kategori;
-                
-                // Show info if mapping happened (R1/R2/R3 → RC)
-                if (detailedKategori && detailedKategori !== materialType && ['R1', 'R2', 'R3'].includes(detailedKategori)) {
-                  return (
-                    <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                      <p className="text-sm text-blue-800">
-                        ℹ️ <strong>Kategori Blok:</strong> {detailedKategori} → 
-                        <strong> Material Type:</strong> {materialType} (Ratoon Cane)
-                        <br />
-                        <span className="text-xs">
-                          Material untuk R1/R2/R3 menggunakan dosis yang sama dengan RC.
-                        </span>
-                      </p>
-                    </div>
-                  );
-                }
-                return null;
-              })()}
-              
-              <MaterialSelector
-                activityTypeId={formData.activity_type_id}
-                kategori={kategori}
-                totalLuasan={totalLuasan}
-                onMaterialsChange={(materials) => {
-                  setFormData(prev => ({
-                    ...prev,
-                    materials: materials
-                  }));
-                }}
-              />
-            </div>
-          )}
-                         
-
           {formData.vendor_id && (
             <div className="border-t pt-6">
               <h3 className="font-semibold text-lg mb-4">👷 Data Pekerja</h3>
@@ -1100,8 +1007,6 @@ export default function TransactionForm({ data, loading }) {
                     actual_ton: '',
                     varietas_override: '',
                     materials: [],
-                    stage_id: null,
-                    alternative_option: null,
                     catatan: ''
                   });
                 }
