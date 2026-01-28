@@ -921,19 +921,7 @@ export default function TransactionForm({ data, loading }) {
               />
             </div>
           )}
-                          type="button"
-                          onClick={() => removeMaterial(idx)}
-                          className="w-full py-2 text-red-600 hover:bg-red-50 rounded"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                         
 
           {formData.vendor_id && (
             <div className="border-t pt-6">
