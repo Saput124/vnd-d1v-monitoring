@@ -234,11 +234,31 @@ export default function TransactionForm({ data, loading }) {
     return formData.selectedBlocks.reduce((sum, b) => sum + (parseFloat(b.luasan) || 0), 0);
   }, [formData.selectedBlocks]);
 
-  // ⭐ NEW: Get kategori from selected blocks (assume all same kategori)
+  // ⭐ Helper function: Map detailed kategori to material type
+  const getMaterialType = (kategori) => {
+    // R1, R2, R3, RC all map to RC for material purposes
+    if (['RC', 'R1', 'R2', 'R3'].includes(kategori)) {
+      return 'RC';
+    }
+    // PC maps to PC
+    if (kategori === 'PC') {
+      return 'PC';
+    }
+    // Bibit defaults to PC (but should be confirmed in BlockRegistration)
+    if (kategori === 'Bibit') {
+      return 'PC';
+    }
+    // Fallback to PC
+    return 'PC';
+  };
+
+  // ⭐ NEW: Get material type from selected blocks (maps R1/R2/R3 → RC)
   const kategori = useMemo(() => {
     if (formData.selectedBlocks.length === 0) return 'PC';
     const firstBlockActivity = availableBlocks.find(ba => ba.id === formData.selectedBlocks[0].id);
-    return firstBlockActivity?.kategori || 'PC';
+    const detailedKategori = firstBlockActivity?.kategori || 'PC';
+    // Map to material type for MaterialSelector
+    return getMaterialType(detailedKategori);
   }, [formData.selectedBlocks, availableBlocks]);
 
   const totalPekerja = useMemo(() => {
@@ -865,6 +885,30 @@ export default function TransactionForm({ data, loading }) {
           {/* ⭐ NEW: MaterialSelector for activities with requires_material = true */}
           {selectedActivity?.requires_material && formData.selectedBlocks.length > 0 && (
             <div className="border-t pt-6">
+              {/* Show kategori mapping info if detailed kategori is used */}
+              {(() => {
+                const firstBlockActivity = availableBlocks.find(ba => ba.id === formData.selectedBlocks[0].id);
+                const detailedKategori = firstBlockActivity?.kategori;
+                const materialType = kategori;
+                
+                // Show info if mapping happened (R1/R2/R3 → RC)
+                if (detailedKategori && detailedKategori !== materialType && ['R1', 'R2', 'R3'].includes(detailedKategori)) {
+                  return (
+                    <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <p className="text-sm text-blue-800">
+                        ℹ️ <strong>Kategori Blok:</strong> {detailedKategori} → 
+                        <strong> Material Type:</strong> {materialType} (Ratoon Cane)
+                        <br />
+                        <span className="text-xs">
+                          Material untuk R1/R2/R3 menggunakan dosis yang sama dengan RC.
+                        </span>
+                      </p>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+              
               <MaterialSelector
                 activityTypeId={formData.activity_type_id}
                 kategori={kategori}
