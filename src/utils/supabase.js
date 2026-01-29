@@ -9,10 +9,10 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// ✅ SOLUTION: sessionStorage (per-tab) + Activity tracking untuk prevent auto-logout
+// Session management
 const STORAGE_KEY = 'vnd_user_session';
 const LAST_ACTIVITY_KEY = 'vnd_last_activity';
-const SESSION_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+const SESSION_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours
 
 // Update last activity timestamp
 export const updateActivity = () => {
@@ -30,6 +30,8 @@ const isSessionValid = () => {
 
 export const signIn = async (username, password) => {
   try {
+    console.log('🔍 Attempting login for username:', username);
+    
     // 1. Get user data with section info
     const { data: userData, error: userError } = await supabase
       .from('users')
@@ -42,20 +44,28 @@ export const signIn = async (username, password) => {
       .single();
     
     if (userError || !userData) {
-      console.error('User not found:', userError);
+      console.error('❌ User not found:', userError);
       return { 
         data: null, 
         error: { message: 'Username tidak ditemukan atau tidak aktif' } 
       };
     }
     
-    // 2. Check password
-    if (userData.password_hash !== password) {
+    console.log('✅ User found:', userData.username);
+    console.log('🔑 Checking password...');
+    
+    // 2. Check password - FIXED: use 'password' column not 'password_hash'
+    if (userData.password !== password) {
+      console.error('❌ Password mismatch');
+      console.log('Expected:', userData.password);
+      console.log('Received:', password);
       return { 
         data: null, 
         error: { message: 'Password salah' } 
       };
     }
+    
+    console.log('✅ Password correct');
     
     // 3. Initialize additional data
     let vendor_id = null;
@@ -66,6 +76,8 @@ export const signIn = async (username, password) => {
     
     // 4. Get vendor info if user is vendor
     if (userData.role === 'vendor') {
+      console.log('👤 User is vendor, fetching vendor data...');
+      
       const { data: vendorData, error: vendorError } = await supabase
         .from('user_vendors')
         .select(`
@@ -91,6 +103,10 @@ export const signIn = async (username, password) => {
           code: vs.sections.code,
           name: vs.sections.name
         })) || [];
+        
+        console.log('✅ Vendor data loaded:', vendor_name);
+      } else {
+        console.warn('⚠️ Vendor data not found for user');
       }
     }
     
@@ -99,7 +115,7 @@ export const signIn = async (username, password) => {
       id: userData.id,
       username: userData.username,
       full_name: userData.full_name,
-      email: userData.email,
+      email: userData.email || null, // Optional field
       phone: userData.phone,
       role: userData.role,
       section_id,
@@ -111,13 +127,19 @@ export const signIn = async (username, password) => {
       created_at: userData.created_at
     };
     
-    console.log('✅ Login Success:', fullUserData);
+    console.log('✅ Login Success:', {
+      username: fullUserData.username,
+      role: fullUserData.role,
+      section: section_name,
+      vendor: vendor_name
+    });
     
-    // ✅ Save to sessionStorage (per-tab independent)
+    // Save to sessionStorage
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(fullUserData));
-    updateActivity(); // Set initial activity timestamp
+    updateActivity();
     
     return { data: { user: fullUserData }, error: null };
+    
   } catch (err) {
     console.error('❌ Login error:', err);
     return { 
